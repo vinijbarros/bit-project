@@ -17,6 +17,7 @@ type Config struct {
 	Environment         string
 	HTTP                HTTPConfig
 	Database            DatabaseConfig
+	Auth                AuthConfig
 	TrustedOrigins      []string
 	ShutdownTimeout     time.Duration
 	MigrationsDirectory string
@@ -37,6 +38,16 @@ type DatabaseConfig struct {
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
 	ConnMaxIdleTime time.Duration
+}
+
+type AuthConfig struct {
+	SessionDuration     time.Duration
+	SessionTokenBytes   int
+	CookieName          string
+	CookieSecure        bool
+	LoginMaxAttempts    int
+	LoginWindow         time.Duration
+	LoginLimiterEntries int
 }
 
 func Load() (Config, error) {
@@ -110,6 +121,33 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	sessionDuration, err := positiveDuration("SESSION_DURATION", 8*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+	sessionTokenBytes, err := positiveInt("SESSION_TOKEN_BYTES", 32)
+	if err != nil || sessionTokenBytes < 32 || sessionTokenBytes > 128 {
+		return Config{}, invalid("SESSION_TOKEN_BYTES must be between 32 and 128")
+	}
+	cookieSecure, err := boolean("SESSION_COOKIE_SECURE", environment == "production")
+	if err != nil {
+		return Config{}, err
+	}
+	if environment == "production" && !cookieSecure {
+		return Config{}, invalid("SESSION_COOKIE_SECURE must be true in production")
+	}
+	loginMaxAttempts, err := positiveInt("LOGIN_RATE_LIMIT_MAX_ATTEMPTS", 5)
+	if err != nil {
+		return Config{}, err
+	}
+	loginWindow, err := positiveDuration("LOGIN_RATE_LIMIT_WINDOW", 15*time.Minute)
+	if err != nil {
+		return Config{}, err
+	}
+	loginLimiterEntries, err := positiveInt("LOGIN_RATE_LIMIT_MAX_ENTRIES", 10000)
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		Environment: environment,
@@ -128,10 +166,28 @@ func Load() (Config, error) {
 			ConnMaxLifetime: connMaxLifetime,
 			ConnMaxIdleTime: connMaxIdleTime,
 		},
+		Auth: AuthConfig{
+			SessionDuration:     sessionDuration,
+			SessionTokenBytes:   sessionTokenBytes,
+			CookieName:          "portal_session",
+			CookieSecure:        cookieSecure,
+			LoginMaxAttempts:    loginMaxAttempts,
+			LoginWindow:         loginWindow,
+			LoginLimiterEntries: loginLimiterEntries,
+		},
 		TrustedOrigins:      trustedOrigins,
 		ShutdownTimeout:     shutdownTimeout,
 		MigrationsDirectory: migrationsDirectory,
 	}, nil
+}
+
+func boolean(name string, fallback bool) (bool, error) {
+	raw := valueOrDefault(name, strconv.FormatBool(fallback))
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, invalid(name + " must be true or false")
+	}
+	return value, nil
 }
 
 func parseTrustedOrigins(raw string) ([]string, error) {

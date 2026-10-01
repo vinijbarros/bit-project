@@ -108,6 +108,15 @@ func routeName(request *http.Request) string {
 	if request.Method == http.MethodGet && request.URL.Path == "/readyz" {
 		return "GET /readyz"
 	}
+	if request.Method == http.MethodPost && request.URL.Path == "/api/v1/auth/login" {
+		return "POST /api/v1/auth/login"
+	}
+	if request.Method == http.MethodPost && request.URL.Path == "/api/v1/auth/logout" {
+		return "POST /api/v1/auth/logout"
+	}
+	if request.Method == http.MethodGet && request.URL.Path == "/api/v1/auth/me" {
+		return "GET /api/v1/auth/me"
+	}
 	if strings.HasPrefix(request.URL.Path, "/api/") {
 		return "/api/*"
 	}

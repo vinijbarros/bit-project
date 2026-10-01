@@ -10,6 +10,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"portal-solicitacoes/internal/domain"
+	"portal-solicitacoes/internal/service"
 )
 
 type stubPinger struct {
@@ -20,6 +23,20 @@ func newTestRouter(db databasePinger) http.Handler {
 	return NewRouter(db, RouterConfig{
 		ReadinessTimeout: time.Second,
 		Logger:           slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)),
+		AuthService: stubAuthService{
+			login: func(context.Context, service.LoginInput, string) (service.LoginResult, error) {
+				return service.LoginResult{}, service.ErrInvalidCredentials
+			},
+			authenticate: func(_ context.Context, token string) (domain.User, error) {
+				if token == "valid-test-token" {
+					return domain.User{ID: 1, Username: "teste", DisplayName: "Teste"}, nil
+				}
+				return domain.User{}, service.ErrUnauthenticated
+			},
+		},
+		TrustedOrigins: []string{"http://127.0.0.1:5173"},
+		SessionCookie:  SessionCookieConfig("portal_session", false, 8*time.Hour),
+		LoginRateLimit: LoginRateLimitConfig(5, 15*time.Minute, 100),
 	})
 }
 
@@ -87,7 +104,8 @@ func TestProbeRejectsUnsupportedMethod(t *testing.T) {
 
 func TestUnimplementedAPIRouteReturnsStructuredNotFound(t *testing.T) {
 	router := newTestRouter(stubPinger{})
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"username":"user","password":"secret"}`))
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/metadata", nil)
+	request.AddCookie(&http.Cookie{Name: "portal_session", Value: "valid-test-token"})
 	response := httptest.NewRecorder()
 
 	router.ServeHTTP(response, request)
@@ -98,8 +116,5 @@ func TestUnimplementedAPIRouteReturnsStructuredNotFound(t *testing.T) {
 	body := response.Body.String()
 	if !strings.Contains(body, `"code":"route_not_found"`) {
 		t.Fatalf("body = %q, want structured route_not_found", body)
-	}
-	if strings.Contains(body, "secret") {
-		t.Fatalf("body = %q, must not echo request body", body)
 	}
 }

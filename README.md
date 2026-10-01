@@ -1,6 +1,6 @@
 # Portal de Solicitações Internas
 
-Base executável do desafio técnico da bit Soluções. Nesta etapa existem a infraestrutura compartilhada da API, probes de saúde/prontidão, contrato OpenAPI, conexão PostgreSQL, migrations, seed de demonstração e uma página React de confirmação. Autenticação HTTP, dashboard e CRUD de solicitações ainda não foram implementados.
+Base executável do desafio técnico da bit Soluções. Nesta etapa existem autenticação persistente por cookie, infraestrutura compartilhada da API, probes, contrato OpenAPI, PostgreSQL, migrations, seed e uma página React de confirmação. Dashboard, metadata, CRUD de solicitações e telas autenticadas ainda não foram implementados.
 
 ## Pré-requisitos fixados
 
@@ -35,9 +35,30 @@ Os valores fornecidos são apenas de demonstração local. `DATABASE_URL` é obr
 
 ## Contrato HTTP
 
-O contrato está em `docs/openapi.yaml`, com explicações em `docs/API.md`. Nesta etapa somente `GET /healthz` e `GET /readyz` são operações reais. Os endpoints de autenticação, metadata, solicitações e dashboard estão documentados como planejados e retornam `404 route_not_found` até receberem handlers reais.
+O contrato está em `docs/openapi.yaml`, com explicações em `docs/API.md`. `GET /healthz`, `GET /readyz`, login, logout e `/auth/me` são reais. Metadata, solicitações e dashboard permanecem planejados; sem sessão retornam `401` e, autenticados, `404 route_not_found` até receberem handlers reais.
 
-A infraestrutura atual oferece JSON estrito limitado a 1 MiB, erros estruturados, validação de IDs/paginação, request ID, logs seguros, recuperação de panic e guard de origem para as futuras rotas mutáveis. O guard será conectado junto aos handlers; não existe sucesso simulado.
+A infraestrutura oferece JSON estrito limitado a 1 MiB, erros estruturados, validação de IDs/paginação, request ID, logs seguros, recuperação de panic e proteção de origem. Login/logout já exigem `Origin`; futuras mutações seguirão a mesma regra. Não existe sucesso simulado.
+
+## Autenticação local
+
+Com banco, migrations, seed e API ativos:
+
+```sh
+curl -i -c /tmp/portal-cookies.txt \
+  -H 'Content-Type: application/json' \
+  -H 'Origin: http://127.0.0.1:5173' \
+  --data '{"username":"colaborador1","password":"DemoLocal-Colaborador1"}' \
+  http://127.0.0.1:8080/api/v1/auth/login
+
+curl -i -b /tmp/portal-cookies.txt \
+  http://127.0.0.1:8080/api/v1/auth/me
+
+curl -i -b /tmp/portal-cookies.txt \
+  -H 'Origin: http://127.0.0.1:5173' \
+  -X POST http://127.0.0.1:8080/api/v1/auth/logout
+```
+
+A sessão tem expiração absoluta de 8 horas por padrão e não é renovada. O token original fica somente no cookie `HttpOnly`; o PostgreSQL armazena SHA-256. `SESSION_COOKIE_SECURE=false` é exclusivo do HTTP local e produção exige `true`. O limite padrão de login é 5 falhas por username/IP em 15 minutos; por ser em memória, não é compartilhado entre instâncias.
 
 Para carregar `.env` sem Make:
 
