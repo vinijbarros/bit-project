@@ -37,8 +37,11 @@ func main() {
 	cancelStartup()
 
 	server := &http.Server{
-		Addr:              cfg.HTTP.Address,
-		Handler:           httpapi.NewRouter(db, cfg.Database.ConnectTimeout),
+		Addr: cfg.HTTP.Address,
+		Handler: httpapi.NewRouter(db, httpapi.RouterConfig{
+			ReadinessTimeout: cfg.Database.ConnectTimeout,
+			Logger:           logger,
+		}),
 		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
 		ReadTimeout:       cfg.HTTP.ReadTimeout,
 		WriteTimeout:      cfg.HTTP.WriteTimeout,

@@ -17,6 +17,7 @@ type Config struct {
 	Environment         string
 	HTTP                HTTPConfig
 	Database            DatabaseConfig
+	TrustedOrigins      []string
 	ShutdownTimeout     time.Duration
 	MigrationsDirectory string
 }
@@ -105,6 +106,10 @@ func Load() (Config, error) {
 	if strings.TrimSpace(migrationsDirectory) == "" {
 		return Config{}, invalid("MIGRATIONS_DIR cannot be empty")
 	}
+	trustedOrigins, err := parseTrustedOrigins(valueOrDefault("TRUSTED_ORIGINS", "http://127.0.0.1:5173"))
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		Environment: environment,
@@ -123,9 +128,31 @@ func Load() (Config, error) {
 			ConnMaxLifetime: connMaxLifetime,
 			ConnMaxIdleTime: connMaxIdleTime,
 		},
+		TrustedOrigins:      trustedOrigins,
 		ShutdownTimeout:     shutdownTimeout,
 		MigrationsDirectory: migrationsDirectory,
 	}, nil
+}
+
+func parseTrustedOrigins(raw string) ([]string, error) {
+	seen := make(map[string]struct{})
+	origins := make([]string, 0)
+	for _, item := range strings.Split(raw, ",") {
+		origin := strings.TrimSpace(item)
+		parsed, err := url.Parse(origin)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+			return nil, invalid("TRUSTED_ORIGINS must contain comma-separated HTTP(S) origins without paths")
+		}
+		if _, exists := seen[origin]; exists {
+			continue
+		}
+		seen[origin] = struct{}{}
+		origins = append(origins, origin)
+	}
+	if len(origins) == 0 {
+		return nil, invalid("TRUSTED_ORIGINS must contain at least one origin")
+	}
+	return origins, nil
 }
 
 func validateDatabaseURL(raw string) error {

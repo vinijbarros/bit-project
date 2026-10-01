@@ -1,8 +1,10 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,12 +16,19 @@ type stubPinger struct {
 	err error
 }
 
+func newTestRouter(db databasePinger) http.Handler {
+	return NewRouter(db, RouterConfig{
+		ReadinessTimeout: time.Second,
+		Logger:           slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)),
+	})
+}
+
 func (p stubPinger) PingContext(context.Context) error {
 	return p.err
 }
 
 func TestHealthIsIndependentFromDatabase(t *testing.T) {
-	router := NewRouter(stubPinger{err: errors.New("offline")}, time.Second)
+	router := newTestRouter(stubPinger{err: errors.New("offline")})
 	request := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	response := httptest.NewRecorder()
 
@@ -34,7 +43,7 @@ func TestHealthIsIndependentFromDatabase(t *testing.T) {
 }
 
 func TestReadyWhenDatabaseIsAvailable(t *testing.T) {
-	router := NewRouter(stubPinger{}, time.Second)
+	router := newTestRouter(stubPinger{})
 	request := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	response := httptest.NewRecorder()
 
@@ -46,7 +55,7 @@ func TestReadyWhenDatabaseIsAvailable(t *testing.T) {
 }
 
 func TestReadyWhenDatabaseIsUnavailable(t *testing.T) {
-	router := NewRouter(stubPinger{err: errors.New("offline")}, time.Second)
+	router := newTestRouter(stubPinger{err: errors.New("offline")})
 	request := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	response := httptest.NewRecorder()
 
@@ -65,7 +74,7 @@ func TestReadyWhenDatabaseIsUnavailable(t *testing.T) {
 }
 
 func TestProbeRejectsUnsupportedMethod(t *testing.T) {
-	router := NewRouter(stubPinger{}, time.Second)
+	router := newTestRouter(stubPinger{})
 	request := httptest.NewRequest(http.MethodPost, "/healthz", nil)
 	response := httptest.NewRecorder()
 
@@ -73,5 +82,24 @@ func TestProbeRejectsUnsupportedMethod(t *testing.T) {
 
 	if response.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestUnimplementedAPIRouteReturnsStructuredNotFound(t *testing.T) {
+	router := newTestRouter(stubPinger{})
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"username":"user","password":"secret"}`))
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusNotFound)
+	}
+	body := response.Body.String()
+	if !strings.Contains(body, `"code":"route_not_found"`) {
+		t.Fatalf("body = %q, want structured route_not_found", body)
+	}
+	if strings.Contains(body, "secret") {
+		t.Fatalf("body = %q, must not echo request body", body)
 	}
 }

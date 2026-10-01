@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"time"
 )
@@ -17,23 +16,10 @@ func ready(db databasePinger, timeout time.Duration) http.HandlerFunc {
 		defer cancel()
 
 		if err := db.PingContext(ctx); err != nil {
-			writeJSON(response, http.StatusServiceUnavailable, map[string]any{
-				"status": "unavailable",
-				"error": map[string]string{
-					"code":    "database_unavailable",
-					"message": "database is unavailable",
-				},
-			})
+			writeError(response, request, http.StatusServiceUnavailable, "database_unavailable", "Banco de dados indisponível.", nil)
 			return
 		}
 
 		writeJSON(response, http.StatusOK, map[string]string{"status": "ready"})
 	}
-}
-
-func writeJSON(response http.ResponseWriter, status int, payload any) {
-	response.Header().Set("Content-Type", "application/json; charset=utf-8")
-	response.Header().Set("Cache-Control", "no-store")
-	response.WriteHeader(status)
-	_ = json.NewEncoder(response).Encode(payload)
 }
