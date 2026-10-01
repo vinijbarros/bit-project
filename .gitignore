@@ -1,0 +1,36 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Internal project documentation (kept locally for now)
+AGENTS.md
+docs/
+
+# Go build and coverage artifacts
+.cache/
+backend/bin/
+backend/coverage.out
+backend/*.test
+
+# Frontend dependencies and build artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/*.tsbuildinfo
+
+# Database data and local volumes
+.data/
+postgres-data/
+
+# Editor and operating system files
+.git-local/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
