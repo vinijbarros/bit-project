@@ -16,6 +16,7 @@ type RouterConfig struct {
 	Logger           *slog.Logger
 	AuthService      authService
 	RequestService   requestService
+	DashboardService dashboardService
 	TrustedOrigins   []string
 	SessionCookie    sessionCookieConfig
 	LoginRateLimit   loginRateLimitConfig
@@ -38,6 +39,7 @@ func NewRouter(db databasePinger, cfg RouterConfig) http.Handler {
 		logger:  logger,
 	}
 	requests := &requestHandler{service: cfg.RequestService, logger: logger}
+	dashboard := &dashboardHandler{service: cfg.DashboardService, logger: logger}
 	originGuard := func(next http.Handler) http.Handler {
 		return requireTrustedOrigin(trustedOriginSet(cfg.TrustedOrigins), next)
 	}
@@ -50,6 +52,7 @@ func NewRouter(db databasePinger, cfg RouterConfig) http.Handler {
 	mux.Handle("PATCH /api/v1/requests/{id}", auth.requireAuthentication(originGuard(http.HandlerFunc(requests.update))))
 	mux.Handle("DELETE /api/v1/requests/{id}", auth.requireAuthentication(originGuard(http.HandlerFunc(requests.delete))))
 	mux.Handle("PATCH /api/v1/requests/{id}/status", auth.requireAuthentication(originGuard(http.HandlerFunc(requests.updateStatus))))
+	mux.Handle("GET /api/v1/dashboard", auth.requireAuthentication(http.HandlerFunc(dashboard.get)))
 	mux.Handle("/api/", auth.requireAuthentication(http.HandlerFunc(apiNotFound)))
 
 	return requestID(requestLog(logger, recoverPanics(logger, mux)))

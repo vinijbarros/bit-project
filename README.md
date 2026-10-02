@@ -1,6 +1,6 @@
 # Portal de Solicitações Internas
 
-Base executável do desafio técnico da bit Soluções. Nesta etapa existem autenticação persistente por cookie, CRUD, mudança de status e listagem/filtros reais, infraestrutura compartilhada da API, probes, contrato OpenAPI, PostgreSQL, migrations, seed e uma página React de confirmação. Dashboard, metadata e telas autenticadas ainda não foram implementados.
+Portal em desenvolvimento para o desafio técnico da bit Soluções. O backend já oferece autenticação persistente, CRUD, status, listagem/filtros e dashboard reais. O frontend possui login completo, recuperação da sessão por cookie, rotas protegidas, logout e shell responsivo; as telas de solicitações e dashboard ainda são placeholders explícitos. Metadata continua planejada no backend.
 
 ## Pré-requisitos fixados
 
@@ -20,7 +20,7 @@ As dependências exatas ficam em `backend/go.mod`, `backend/go.sum`, `frontend/p
 | API Go | `http://127.0.0.1:8080` |
 | PostgreSQL | `127.0.0.1:5432` |
 
-O frontend usa URLs relativas sob `/api/v1`. Em desenvolvimento, o Vite encaminha `/api` para `http://127.0.0.1:8080`, evitando CORS e preparando o uso futuro de cookies no mesmo site. `TRUSTED_ORIGINS` recebe uma lista de origens HTTP(S) exatas, separadas por vírgula; o padrão local é `http://127.0.0.1:5173`.
+O frontend usa URLs relativas sob `/api/v1`. Em desenvolvimento, o Vite encaminha `/api` para `http://127.0.0.1:8080`, evitando CORS e mantendo o cookie de sessão no fluxo same-origin. `TRUSTED_ORIGINS` recebe uma lista de origens HTTP(S) exatas, separadas por vírgula; o padrão local é `http://127.0.0.1:5173`.
 
 ## Configuração
 
@@ -35,7 +35,7 @@ Os valores fornecidos são apenas de demonstração local. `DATABASE_URL` é obr
 
 ## Contrato HTTP
 
-O contrato está em `docs/openapi.yaml`, com explicações em `docs/API.md`. Probes, login/logout/me, CRUD, status e listagem/filtros são reais. Metadata e dashboard permanecem planejados; sem sessão retornam `401` e, autenticados, `404 route_not_found` até receberem handlers reais.
+O contrato está em `docs/openapi.yaml`, com explicações em `docs/API.md`. Probes, login/logout/me, CRUD, status, listagem/filtros e dashboard são reais. Metadata permanece planejada; sem sessão retorna `401` e, autenticado, `404 route_not_found` até receber um handler real.
 
 A infraestrutura oferece JSON estrito limitado a 1 MiB, erros estruturados, validação de IDs/paginação, request ID, logs seguros, recuperação de panic e proteção de origem. Login/logout e POST/PATCH/DELETE de solicitações exigem `Origin`; futuras mutações seguirão a mesma regra. Não existe sucesso simulado.
 
@@ -148,10 +148,25 @@ go build ./...
 
 cd ../frontend
 npm ci
+npm run test
 npm run lint
 npm run typecheck
 npm run build
 ```
+
+### Integração PostgreSQL
+
+Os testes de integração usam migrations reais e nunca reutilizam `DATABASE_URL`. O banco precisa ser indicado em `TEST_DATABASE_URL`, ter nome terminado em `_test` e receber a confirmação separada `TEST_DATABASE_ALLOW_RESET=yes`, pois a suíte executa `TRUNCATE` entre cenários.
+
+```sh
+make db-test-up
+TEST_DATABASE_URL='postgres://portal_test:portal_test@127.0.0.1:55435/portal_test?sslmode=disable' \
+  TEST_DATABASE_ALLOW_RESET=yes \
+  make test-integration
+make db-test-down
+```
+
+Sem Make, execute o mesmo `docker compose -f compose.test.yaml -p bit-project-integration ...` e, dentro de `backend/`, `go test -count=1 ./internal/integration`. A estratégia e a matriz detalhada estão em `docs/TESTES.md`.
 
 Probes da API:
 

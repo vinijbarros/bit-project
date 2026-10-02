@@ -45,6 +45,8 @@ func main() {
 	})
 	requestRepository := repository.NewRequest(db)
 	requestService := service.NewRequest(requestRepository)
+	dashboardRepository := repository.NewDashboard(db)
+	dashboardService := service.NewDashboard(dashboardRepository)
 
 	server := &http.Server{
 		Addr: cfg.HTTP.Address,
@@ -53,6 +55,7 @@ func main() {
 			Logger:           logger,
 			AuthService:      authService,
 			RequestService:   requestService,
+			DashboardService: dashboardService,
 			TrustedOrigins:   cfg.TrustedOrigins,
 			SessionCookie: httpapi.SessionCookieConfig(
 				cfg.Auth.CookieName,

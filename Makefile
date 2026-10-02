@@ -4,18 +4,21 @@ export
 GOCACHE ?= $(CURDIR)/.cache/go-build
 export GOCACHE
 
-.PHONY: help db-up db-down api migrate-up migrate-status migrate-down seed-demo seed-reset-passwords frontend-install frontend-dev fmt check build
+.PHONY: help db-up db-down db-test-up db-test-down api migrate-up migrate-status migrate-down seed-demo seed-reset-passwords test-integration frontend-install frontend-dev fmt check build
 
 help:
 	@echo "Alvos disponíveis:"
 	@echo "  db-up            inicia somente o PostgreSQL"
 	@echo "  db-down          encerra o PostgreSQL"
+	@echo "  db-test-up       inicia PostgreSQL descartável de integração"
+	@echo "  db-test-down     remove PostgreSQL descartável de integração"
 	@echo "  api              inicia a API Go"
 	@echo "  migrate-up       aplica migrations Goose"
 	@echo "  migrate-status   mostra o estado das migrations"
 	@echo "  migrate-down     reverte a última migration (exige CONFIRM_DOWN=yes)"
 	@echo "  seed-demo        cria dados locais (exige DEMO_SEED_ENABLED=true)"
 	@echo "  seed-reset-passwords redefine senhas demo (exige confirmação)"
+	@echo "  test-integration executa testes PostgreSQL (exige TEST_DATABASE_URL e confirmação)"
 	@echo "  frontend-install instala dependências com npm ci"
 	@echo "  frontend-dev     inicia o Vite em modo desenvolvimento"
 	@echo "  fmt              formata o código Go"
@@ -27,6 +30,12 @@ db-up:
 
 db-down:
 	docker compose down
+
+db-test-up:
+	docker compose -f compose.test.yaml -p bit-project-integration up -d --wait postgres-test
+
+db-test-down:
+	docker compose -f compose.test.yaml -p bit-project-integration down --remove-orphans
 
 api:
 	cd backend && go run ./cmd/api
@@ -48,6 +57,11 @@ seed-reset-passwords:
 	@test "$(CONFIRM_SEED_PASSWORD_RESET)" = "yes" || (echo "Use CONFIRM_SEED_PASSWORD_RESET=yes para confirmar o reset" && exit 1)
 	cd backend && go run ./cmd/seed --reset-passwords
 
+test-integration:
+	@test -n "$(TEST_DATABASE_URL)" || (echo "Defina TEST_DATABASE_URL para um banco descartável com nome terminado em _test" && exit 1)
+	@test "$(TEST_DATABASE_ALLOW_RESET)" = "yes" || (echo "Defina TEST_DATABASE_ALLOW_RESET=yes para autorizar a limpeza do banco de teste" && exit 1)
+	cd backend && go test -count=1 ./internal/integration
+
 frontend-install:
 	cd frontend && npm ci
 
@@ -59,7 +73,7 @@ fmt:
 
 check:
 	cd backend && test -z "$$(gofmt -l .)" && go vet ./... && go test ./...
-	cd frontend && npm run lint && npm run typecheck
+	cd frontend && npm run test && npm run lint && npm run typecheck
 
 build:
 	cd backend && go build ./...
