@@ -117,6 +117,9 @@ func routeName(request *http.Request) string {
 	if request.Method == http.MethodGet && request.URL.Path == "/api/v1/auth/me" {
 		return "GET /api/v1/auth/me"
 	}
+	if request.Method == http.MethodGet && request.URL.Path == "/api/v1/metadata" {
+		return "GET /api/v1/metadata"
+	}
 	if request.Method == http.MethodGet && request.URL.Path == "/api/v1/dashboard" {
 		return "GET /api/v1/dashboard"
 	}

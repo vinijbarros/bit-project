@@ -16,6 +16,31 @@
 .field-error { color: var(--danger); font-size: .88rem; font-weight: 650; }
 .scope-note { margin: 1.25rem 0 0; font-size: .85rem; text-align: center; }
 
+.filters-panel { margin-bottom: 1.5rem; padding: 1.25rem; border: 1px solid var(--border); border-radius: .9rem; background: var(--surface); }
+.filters-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; }
+.filters-grid .form-field:last-child { grid-column: 1 / -1; }
+.filter-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.results-summary { margin-bottom: .75rem; font-size: .9rem; }
+
+.table-region { overflow-x: auto; border: 1px solid var(--border); border-radius: .9rem; background: var(--surface); }
+.requests-table { width: 100%; min-width: 64rem; border-collapse: collapse; }
+.requests-table th, .requests-table td { padding: .85rem 1rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+.requests-table th { background: var(--surface-muted); color: var(--brand-900); font-size: .8rem; letter-spacing: .02em; }
+.requests-table tbody tr:last-child td { border-bottom: 0; }
+.requests-table tbody tr:hover { background: #f8fbfc; }
+.requester-name, .requester-username { display: block; }
+.requester-username { margin-top: .15rem; color: var(--text-muted); font-size: .78rem; }
+.table-action { white-space: nowrap; }
+.pagination { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1rem; }
+
+.request-detail-card { padding: clamp(1.25rem, 3vw, 2rem); border: 1px solid var(--border); border-radius: .9rem; background: var(--surface); }
+.request-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem 2rem; margin: 0; }
+.request-detail-grid div { min-width: 0; }
+.request-detail-grid dt { margin-bottom: .35rem; color: var(--text-muted); font-size: .8rem; font-weight: 750; text-transform: uppercase; }
+.request-detail-grid dd { margin: 0; color: var(--brand-900); font-weight: 650; }
+.request-description { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+.request-description p { margin-bottom: 0; color: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
+
 .badge { display: inline-flex; align-items: center; min-height: 1.75rem; padding: .2rem .55rem; border-radius: 99rem; font-size: .8rem; font-weight: 750; }
 .badge--status-aberto { background: #e5f2ff; color: #165a96; }
 .badge--status-em_atendimento { background: #fff1d6; color: #82510a; }
@@ -25,5 +50,13 @@
 .confirm-dialog { width: min(calc(100% - 2rem), 30rem); padding: 1.5rem; border: 1px solid var(--border); border-radius: .9rem; }
 .confirm-dialog::backdrop { background: rgb(16 33 43 / 55%); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: .75rem; margin-top: 1.5rem; }
+
+@media (max-width: 600px) {
+  .filters-grid { grid-template-columns: 1fr; }
+  .filters-grid .form-field:last-child { grid-column: auto; }
+  .filter-actions .button { flex: 1 1 100%; }
+  .pagination { align-items: stretch; flex-direction: column; text-align: center; }
+  .request-detail-grid { grid-template-columns: 1fr; }
+}
 
 @media (max-width: 480px) { .dialog-actions { align-items: stretch; flex-direction: column-reverse; } }

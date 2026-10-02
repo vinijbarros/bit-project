@@ -102,7 +102,7 @@ func TestProbeRejectsUnsupportedMethod(t *testing.T) {
 	}
 }
 
-func TestUnimplementedAPIRouteReturnsStructuredNotFound(t *testing.T) {
+func TestMetadataReturnsStableLabelsToAuthenticatedUser(t *testing.T) {
 	router := newTestRouter(stubPinger{})
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/metadata", nil)
 	request.AddCookie(&http.Cookie{Name: "portal_session", Value: "valid-test-token"})
@@ -110,11 +110,31 @@ func TestUnimplementedAPIRouteReturnsStructuredNotFound(t *testing.T) {
 
 	router.ServeHTTP(response, request)
 
-	if response.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", response.Code, http.StatusNotFound)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
 	}
 	body := response.Body.String()
-	if !strings.Contains(body, `"code":"route_not_found"`) {
-		t.Fatalf("body = %q, want structured route_not_found", body)
+	for _, expected := range []string{
+		`"value":"ti","label":"TI"`,
+		`"value":"infraestrutura","label":"Infraestrutura"`,
+		`"value":"aberto","label":"Aberto"`,
+		`"value":"em_atendimento","label":"Em Atendimento"`,
+		`"value":"concluido","label":"Concluído"`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("body = %q, missing %q", body, expected)
+		}
+	}
+}
+
+func TestMetadataRequiresAuthentication(t *testing.T) {
+	router := newTestRouter(stubPinger{})
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/metadata", nil)
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnauthorized || !strings.Contains(response.Body.String(), `"code":"authentication_required"`) {
+		t.Fatalf("status/body = %d %s", response.Code, response.Body.String())
 	}
 }

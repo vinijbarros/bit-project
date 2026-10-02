@@ -1,6 +1,6 @@
 # Portal de Solicitações Internas
 
-Portal em desenvolvimento para o desafio técnico da bit Soluções. O backend já oferece autenticação persistente, CRUD, status, listagem/filtros e dashboard reais. O frontend possui login completo, recuperação da sessão por cookie, rotas protegidas, logout e shell responsivo; as telas de solicitações e dashboard ainda são placeholders explícitos. Metadata continua planejada no backend.
+Portal em desenvolvimento para o desafio técnico da bit Soluções. O backend já oferece autenticação persistente, metadata, CRUD, status, listagem/filtros e dashboard reais. O frontend possui login completo, recuperação da sessão por cookie, rotas protegidas, logout, listagem responsiva com filtros/paginação e consulta de detalhes; criação, edição e dashboard ainda são placeholders explícitos.
 
 ## Pré-requisitos fixados
 
@@ -35,7 +35,7 @@ Os valores fornecidos são apenas de demonstração local. `DATABASE_URL` é obr
 
 ## Contrato HTTP
 
-O contrato está em `docs/openapi.yaml`, com explicações em `docs/API.md`. Probes, login/logout/me, CRUD, status, listagem/filtros e dashboard são reais. Metadata permanece planejada; sem sessão retorna `401` e, autenticado, `404 route_not_found` até receber um handler real.
+O contrato está em `docs/openapi.yaml`, com explicações em `docs/API.md`. Probes, login/logout/me, metadata, CRUD, status, listagem/filtros e dashboard são reais e protegidos conforme o contrato.
 
 A infraestrutura oferece JSON estrito limitado a 1 MiB, erros estruturados, validação de IDs/paginação, request ID, logs seguros, recuperação de panic e proteção de origem. Login/logout e POST/PATCH/DELETE de solicitações exigem `Origin`; futuras mutações seguirão a mesma regra. Não existe sucesso simulado.
 
