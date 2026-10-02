@@ -17,6 +17,8 @@ type Config struct {
 	Environment         string
 	HTTP                HTTPConfig
 	Database            DatabaseConfig
+	Auth                AuthConfig
+	TrustedOrigins      []string
 	ShutdownTimeout     time.Duration
 	MigrationsDirectory string
 }
@@ -36,6 +38,16 @@ type DatabaseConfig struct {
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
 	ConnMaxIdleTime time.Duration
+}
+
+type AuthConfig struct {
+	SessionDuration     time.Duration
+	SessionTokenBytes   int
+	CookieName          string
+	CookieSecure        bool
+	LoginMaxAttempts    int
+	LoginWindow         time.Duration
+	LoginLimiterEntries int
 }
 
 func Load() (Config, error) {
@@ -105,6 +117,37 @@ func Load() (Config, error) {
 	if strings.TrimSpace(migrationsDirectory) == "" {
 		return Config{}, invalid("MIGRATIONS_DIR cannot be empty")
 	}
+	trustedOrigins, err := parseTrustedOrigins(valueOrDefault("TRUSTED_ORIGINS", "http://127.0.0.1:5173"))
+	if err != nil {
+		return Config{}, err
+	}
+	sessionDuration, err := positiveDuration("SESSION_DURATION", 8*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+	sessionTokenBytes, err := positiveInt("SESSION_TOKEN_BYTES", 32)
+	if err != nil || sessionTokenBytes < 32 || sessionTokenBytes > 128 {
+		return Config{}, invalid("SESSION_TOKEN_BYTES must be between 32 and 128")
+	}
+	cookieSecure, err := boolean("SESSION_COOKIE_SECURE", environment == "production")
+	if err != nil {
+		return Config{}, err
+	}
+	if environment == "production" && !cookieSecure {
+		return Config{}, invalid("SESSION_COOKIE_SECURE must be true in production")
+	}
+	loginMaxAttempts, err := positiveInt("LOGIN_RATE_LIMIT_MAX_ATTEMPTS", 5)
+	if err != nil {
+		return Config{}, err
+	}
+	loginWindow, err := positiveDuration("LOGIN_RATE_LIMIT_WINDOW", 15*time.Minute)
+	if err != nil {
+		return Config{}, err
+	}
+	loginLimiterEntries, err := positiveInt("LOGIN_RATE_LIMIT_MAX_ENTRIES", 10000)
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		Environment: environment,
@@ -123,9 +166,49 @@ func Load() (Config, error) {
 			ConnMaxLifetime: connMaxLifetime,
 			ConnMaxIdleTime: connMaxIdleTime,
 		},
+		Auth: AuthConfig{
+			SessionDuration:     sessionDuration,
+			SessionTokenBytes:   sessionTokenBytes,
+			CookieName:          "portal_session",
+			CookieSecure:        cookieSecure,
+			LoginMaxAttempts:    loginMaxAttempts,
+			LoginWindow:         loginWindow,
+			LoginLimiterEntries: loginLimiterEntries,
+		},
+		TrustedOrigins:      trustedOrigins,
 		ShutdownTimeout:     shutdownTimeout,
 		MigrationsDirectory: migrationsDirectory,
 	}, nil
+}
+
+func boolean(name string, fallback bool) (bool, error) {
+	raw := valueOrDefault(name, strconv.FormatBool(fallback))
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, invalid(name + " must be true or false")
+	}
+	return value, nil
+}
+
+func parseTrustedOrigins(raw string) ([]string, error) {
+	seen := make(map[string]struct{})
+	origins := make([]string, 0)
+	for _, item := range strings.Split(raw, ",") {
+		origin := strings.TrimSpace(item)
+		parsed, err := url.Parse(origin)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+			return nil, invalid("TRUSTED_ORIGINS must contain comma-separated HTTP(S) origins without paths")
+		}
+		if _, exists := seen[origin]; exists {
+			continue
+		}
+		seen[origin] = struct{}{}
+		origins = append(origins, origin)
+	}
+	if len(origins) == 0 {
+		return nil, invalid("TRUSTED_ORIGINS must contain at least one origin")
+	}
+	return origins, nil
 }
 
 func validateDatabaseURL(raw string) error {

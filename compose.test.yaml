@@ -1,0 +1,17 @@
+services:
+  postgres-test:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_DB: portal_test
+      POSTGRES_USER: portal_test
+      POSTGRES_PASSWORD: portal_test
+    ports:
+      - "${TEST_POSTGRES_PORT:-55435}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U portal_test -d portal_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 3s
+    tmpfs:
+      - /var/lib/postgresql/data

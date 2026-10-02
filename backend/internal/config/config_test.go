@@ -25,6 +25,56 @@ func TestLoadUsesDefaults(t *testing.T) {
 	if cfg.Database.MaxOpenConns != 10 || cfg.Database.MaxIdleConns != 5 {
 		t.Errorf("pool = %d/%d, want 10/5", cfg.Database.MaxOpenConns, cfg.Database.MaxIdleConns)
 	}
+	if len(cfg.TrustedOrigins) != 1 || cfg.TrustedOrigins[0] != "http://127.0.0.1:5173" {
+		t.Errorf("TrustedOrigins = %v", cfg.TrustedOrigins)
+	}
+	if cfg.Auth.SessionDuration != 8*time.Hour || cfg.Auth.SessionTokenBytes != 32 || cfg.Auth.CookieSecure {
+		t.Errorf("Auth config = %+v", cfg.Auth)
+	}
+}
+
+func TestLoadParsesAndDeduplicatesTrustedOrigins(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("TRUSTED_ORIGINS", "https://portal.example, http://127.0.0.1:5173,https://portal.example")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(cfg.TrustedOrigins) != 2 || cfg.TrustedOrigins[0] != "https://portal.example" || cfg.TrustedOrigins[1] != "http://127.0.0.1:5173" {
+		t.Fatalf("TrustedOrigins = %v", cfg.TrustedOrigins)
+	}
+}
+
+func TestLoadRejectsTrustedOriginWithPath(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("TRUSTED_ORIGINS", "https://portal.example/app")
+
+	_, err := Load()
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("Load() error = %v, want ErrInvalid", err)
+	}
+}
+
+func TestLoadRejectsInsecureProductionCookie(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("SESSION_COOKIE_SECURE", "false")
+
+	_, err := Load()
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("Load() error = %v, want ErrInvalid", err)
+	}
+}
+
+func TestLoadRejectsShortSessionToken(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("SESSION_TOKEN_BYTES", "16")
+
+	_, err := Load()
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("Load() error = %v, want ErrInvalid", err)
+	}
 }
 
 func TestLoadRejectsMissingDatabaseURL(t *testing.T) {
@@ -84,4 +134,11 @@ func setValidEnvironment(t *testing.T) {
 	t.Setenv("HTTP_IDLE_TIMEOUT", "60s")
 	t.Setenv("SHUTDOWN_TIMEOUT", "10s")
 	t.Setenv("MIGRATIONS_DIR", "db/migrations")
+	t.Setenv("TRUSTED_ORIGINS", "http://127.0.0.1:5173")
+	t.Setenv("SESSION_DURATION", "8h")
+	t.Setenv("SESSION_TOKEN_BYTES", "32")
+	t.Setenv("SESSION_COOKIE_SECURE", "false")
+	t.Setenv("LOGIN_RATE_LIMIT_MAX_ATTEMPTS", "5")
+	t.Setenv("LOGIN_RATE_LIMIT_WINDOW", "15m")
+	t.Setenv("LOGIN_RATE_LIMIT_MAX_ENTRIES", "10000")
 }

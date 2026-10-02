@@ -22,18 +22,17 @@ func main() {
 }
 
 func run(logger *slog.Logger, args []string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: go run ./cmd/migrate [up|down|status|version]")
-	}
-
-	action := strings.ToLower(args[0])
-	if action != "up" && action != "down" && action != "status" && action != "version" {
-		return fmt.Errorf("unsupported migration action %q", action)
+	action, err := parseAction(args)
+	if err != nil {
+		return err
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("invalid application configuration: %w", err)
+	}
+	if action == "down" && cfg.Environment == "production" {
+		return fmt.Errorf("down migrations are disabled when APP_ENV=production")
 	}
 
 	db, err := database.Open(cfg.Database)
@@ -69,4 +68,18 @@ func run(logger *slog.Logger, args []string) error {
 
 	logger.Info("migration command completed", "action", action)
 	return nil
+}
+
+func parseAction(args []string) (string, error) {
+	if len(args) != 1 {
+		return "", fmt.Errorf("usage: go run ./cmd/migrate [up|status|down|version]")
+	}
+
+	action := strings.ToLower(strings.TrimSpace(args[0]))
+	switch action {
+	case "up", "status", "down", "version":
+		return action, nil
+	default:
+		return "", fmt.Errorf("unsupported migration action %q", action)
+	}
 }

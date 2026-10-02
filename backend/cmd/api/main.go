@@ -11,7 +11,9 @@ import (
 
 	"portal-solicitacoes/internal/config"
 	httpapi "portal-solicitacoes/internal/http"
+	"portal-solicitacoes/internal/repository"
 	"portal-solicitacoes/internal/repository/database"
+	"portal-solicitacoes/internal/service"
 )
 
 func main() {
@@ -36,9 +38,36 @@ func main() {
 	}
 	cancelStartup()
 
+	authRepository := repository.NewAuth(db)
+	authService := service.NewAuth(authRepository, service.AuthConfig{
+		SessionDuration: cfg.Auth.SessionDuration,
+		TokenBytes:      cfg.Auth.SessionTokenBytes,
+	})
+	requestRepository := repository.NewRequest(db)
+	requestService := service.NewRequest(requestRepository)
+	dashboardRepository := repository.NewDashboard(db)
+	dashboardService := service.NewDashboard(dashboardRepository)
+
 	server := &http.Server{
-		Addr:              cfg.HTTP.Address,
-		Handler:           httpapi.NewRouter(db, cfg.Database.ConnectTimeout),
+		Addr: cfg.HTTP.Address,
+		Handler: httpapi.NewRouter(db, httpapi.RouterConfig{
+			ReadinessTimeout: cfg.Database.ConnectTimeout,
+			Logger:           logger,
+			AuthService:      authService,
+			RequestService:   requestService,
+			DashboardService: dashboardService,
+			TrustedOrigins:   cfg.TrustedOrigins,
+			SessionCookie: httpapi.SessionCookieConfig(
+				cfg.Auth.CookieName,
+				cfg.Auth.CookieSecure,
+				cfg.Auth.SessionDuration,
+			),
+			LoginRateLimit: httpapi.LoginRateLimitConfig(
+				cfg.Auth.LoginMaxAttempts,
+				cfg.Auth.LoginWindow,
+				cfg.Auth.LoginLimiterEntries,
+			),
+		}),
 		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
 		ReadTimeout:       cfg.HTTP.ReadTimeout,
 		WriteTimeout:      cfg.HTTP.WriteTimeout,
