@@ -112,6 +112,40 @@ func parsePagination(values url.Values) (pagination, error) {
 	return pagination{Page: page, PageSize: pageSize}, nil
 }
 
+func parseSingleOptionalQuery(values url.Values, name string) (string, error) {
+	rawValues, exists := values[name]
+	if !exists {
+		return "", nil
+	}
+	if len(rawValues) != 1 {
+		return "", &requestError{
+			Status:  http.StatusBadRequest,
+			Code:    "invalid_query_parameter",
+			Message: "Um ou mais parâmetros de consulta são inválidos.",
+			Fields:  fieldErrors{name: {"Informe o parâmetro no máximo uma vez."}},
+		}
+	}
+	return rawValues[0], nil
+}
+
+func rejectUnknownQueryParameters(values url.Values, allowed ...string) error {
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, name := range allowed {
+		allowedSet[name] = struct{}{}
+	}
+	for name := range values {
+		if _, ok := allowedSet[name]; !ok {
+			return &requestError{
+				Status:  http.StatusBadRequest,
+				Code:    "invalid_query_parameter",
+				Message: "Um ou mais parâmetros de consulta são inválidos.",
+				Fields:  fieldErrors{"query": {"Parâmetro não reconhecido: " + name + "."}},
+			}
+		}
+	}
+	return nil
+}
+
 func parseSinglePositiveQuery(values url.Values, name string, fallback, maximum int) (int, error) {
 	rawValues, exists := values[name]
 	if !exists || len(rawValues) == 1 && strings.TrimSpace(rawValues[0]) == "" {

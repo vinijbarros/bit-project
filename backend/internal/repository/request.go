@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"portal-solicitacoes/internal/domain"
 )
@@ -27,6 +29,24 @@ type RequestChanges struct {
 	CategorySet    bool
 	Category       string
 }
+
+type RequestFilters struct {
+	DateFrom        *time.Time
+	DateToExclusive *time.Time
+	Category        string
+	Status          string
+	TitleQuery      string
+	Limit           int
+	Offset          int64
+}
+
+const requestFilterSQL = `
+	WHERE ($1::timestamptz IS NULL OR requests.created_at >= $1)
+	  AND ($2::timestamptz IS NULL OR requests.created_at < $2)
+	  AND ($3::text IS NULL OR requests.category = $3)
+	  AND ($4::text IS NULL OR requests.status = $4)
+	  AND ($5::text IS NULL OR requests.title ILIKE $5 ESCAPE '\')
+`
 
 func NewRequest(db *sql.DB) *Request {
 	return &Request{db: db}
@@ -75,6 +95,87 @@ func (repository *Request) FindByID(ctx context.Context, id int64) (domain.Reque
 		return domain.Request{}, fmt.Errorf("find request: %w", err)
 	}
 	return found, nil
+}
+
+func (repository *Request) List(ctx context.Context, filters RequestFilters) (items []domain.Request, total int64, err error) {
+	tx, err := repository.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	if err != nil {
+		return nil, 0, fmt.Errorf("begin request list: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	args := requestFilterArgs(filters)
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM requests`+requestFilterSQL, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count requests: %w", err)
+	}
+
+	queryArgs := append(args, filters.Limit, filters.Offset)
+	rows, err := tx.QueryContext(ctx, `
+		SELECT
+			requests.id, requests.title, requests.category, requests.status,
+			users.id, users.username, users.display_name, requests.created_at
+		FROM requests
+		JOIN users ON users.id = requests.requester_id
+	`+requestFilterSQL+`
+		ORDER BY requests.created_at DESC, requests.id DESC
+		LIMIT $6 OFFSET $7
+	`, queryArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list requests: %w", err)
+	}
+	defer rows.Close()
+
+	items = make([]domain.Request, 0, filters.Limit)
+	for rows.Next() {
+		var item domain.Request
+		if err = rows.Scan(
+			&item.ID,
+			&item.Title,
+			&item.Category,
+			&item.Status,
+			&item.Requester.ID,
+			&item.Requester.Username,
+			&item.Requester.DisplayName,
+			&item.CreatedAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("scan request list: %w", err)
+		}
+		items = append(items, item)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate request list: %w", err)
+	}
+	if err = rows.Close(); err != nil {
+		return nil, 0, fmt.Errorf("close request list: %w", err)
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, 0, fmt.Errorf("commit request list: %w", err)
+	}
+	return items, total, nil
+}
+
+func requestFilterArgs(filters RequestFilters) []any {
+	var dateFrom, dateTo, category, status, titlePattern any
+	if filters.DateFrom != nil {
+		dateFrom = *filters.DateFrom
+	}
+	if filters.DateToExclusive != nil {
+		dateTo = *filters.DateToExclusive
+	}
+	if filters.Category != "" {
+		category = filters.Category
+	}
+	if filters.Status != "" {
+		status = filters.Status
+	}
+	if filters.TitleQuery != "" {
+		titlePattern = "%" + escapeLikePattern(filters.TitleQuery) + "%"
+	}
+	return []any{dateFrom, dateTo, category, status, titlePattern}
+}
+
+func escapeLikePattern(value string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(value)
 }
 
 func (repository *Request) UpdateOwnedOpen(ctx context.Context, id, requesterID int64, changes RequestChanges) (domain.Request, error) {

@@ -3,7 +3,11 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"math"
 	"strings"
+	"time"
+	_ "time/tzdata"
 	"unicode/utf8"
 
 	"portal-solicitacoes/internal/domain"
@@ -20,6 +24,7 @@ var (
 type RequestRepository interface {
 	Create(context.Context, int64, string, string, string) (domain.Request, error)
 	FindByID(context.Context, int64) (domain.Request, error)
+	List(context.Context, repository.RequestFilters) ([]domain.Request, int64, error)
 	UpdateOwnedOpen(context.Context, int64, int64, repository.RequestChanges) (domain.Request, error)
 	DeleteOwnedOpen(context.Context, int64, int64) error
 	UpdateStatus(context.Context, int64, string) (domain.Request, error)
@@ -49,6 +54,24 @@ type UpdateRequestInput struct {
 
 type UpdateRequestStatusInput struct {
 	Status OptionalString
+}
+
+type ListRequestsInput struct {
+	DateFrom string
+	DateTo   string
+	Category string
+	Status   string
+	Query    string
+	Page     int
+	PageSize int
+}
+
+type RequestListResult struct {
+	Items      []domain.Request
+	Page       int
+	PageSize   int
+	TotalItems int64
+	TotalPages int64
 }
 
 type RequestResult struct {
@@ -82,6 +105,25 @@ func (service *Request) Get(ctx context.Context, id, currentUserID int64) (Reque
 		return RequestResult{}, err
 	}
 	return presentRequestResult(found, currentUserID), nil
+}
+
+func (service *Request) List(ctx context.Context, input ListRequestsInput) (RequestListResult, error) {
+	filters, validationErr := validateRequestList(input)
+	if validationErr != nil {
+		return RequestListResult{}, validationErr
+	}
+	items, total, err := service.repository.List(ctx, filters)
+	if err != nil {
+		return RequestListResult{}, err
+	}
+	totalPages := total / int64(input.PageSize)
+	if total%int64(input.PageSize) != 0 {
+		totalPages++
+	}
+	return RequestListResult{
+		Items: items, Page: input.Page, PageSize: input.PageSize,
+		TotalItems: total, TotalPages: totalPages,
+	}, nil
 }
 
 func (service *Request) Update(ctx context.Context, id, currentUserID int64, input UpdateRequestInput) (RequestResult, error) {
@@ -140,6 +182,109 @@ func validateRequestFields(rawTitle, rawDescription, rawCategory string) (string
 		return "", "", "", &ValidationError{Fields: fields}
 	}
 	return title, description, category, nil
+}
+
+func validateRequestList(input ListRequestsInput) (repository.RequestFilters, error) {
+	fields := make(map[string][]string)
+	category := strings.TrimSpace(input.Category)
+	status := strings.TrimSpace(input.Status)
+	query := strings.TrimSpace(input.Query)
+	if category != "" {
+		if _, ok := domain.CategoryLabel(category); !ok {
+			fields["category"] = []string{"Escolha uma categoria válida."}
+		}
+	}
+	if status != "" {
+		if _, ok := domain.StatusLabel(status); !ok {
+			fields["status"] = []string{"Escolha um status válido."}
+		}
+	}
+	if utf8.RuneCountInString(query) > 150 {
+		fields["q"] = []string{"Informe no máximo 150 caracteres."}
+	}
+	if input.Page <= 0 {
+		fields["page"] = []string{"Informe um número inteiro positivo."}
+	}
+	if input.PageSize <= 0 || input.PageSize > 100 {
+		fields["page_size"] = []string{"Informe um número inteiro entre 1 e 100."}
+	}
+	if input.Page > 0 && input.PageSize > 0 && int64(input.Page-1) > math.MaxInt64/int64(input.PageSize) {
+		fields["page"] = []string{"O número da página é muito grande."}
+	}
+
+	location, err := time.LoadLocation("America/Sao_Paulo")
+	if err != nil {
+		return repository.RequestFilters{}, fmt.Errorf("load request filter timezone: %w", err)
+	}
+	var dateFrom, dateToDate *time.Time
+	if raw := strings.TrimSpace(input.DateFrom); raw != "" {
+		parsed, parseErr := parseCalendarDate(raw)
+		if parseErr != nil {
+			fields["date_from"] = []string{"Use uma data real no formato YYYY-MM-DD."}
+		} else {
+			dateFrom = &parsed
+		}
+	}
+	if raw := strings.TrimSpace(input.DateTo); raw != "" {
+		parsed, parseErr := parseCalendarDate(raw)
+		if parseErr != nil {
+			fields["date_to"] = []string{"Use uma data real no formato YYYY-MM-DD."}
+		} else {
+			dateToDate = &parsed
+		}
+	}
+	if dateFrom != nil && dateToDate != nil && dateFrom.After(*dateToDate) {
+		fields["date_to"] = []string{"A data final deve ser igual ou posterior à data inicial."}
+	}
+	if len(fields) > 0 {
+		return repository.RequestFilters{}, &ValidationError{Fields: fields}
+	}
+
+	filters := repository.RequestFilters{
+		Category:   category,
+		Status:     status,
+		TitleQuery: query,
+		Limit:      input.PageSize,
+		Offset:     int64(input.Page-1) * int64(input.PageSize),
+	}
+	if dateFrom != nil {
+		start, startErr := localDayStart(*dateFrom, location)
+		if startErr != nil {
+			return repository.RequestFilters{}, startErr
+		}
+		start = start.UTC()
+		filters.DateFrom = &start
+	}
+	if dateToDate != nil {
+		nextDate := dateToDate.AddDate(0, 0, 1)
+		end, endErr := localDayStart(nextDate, location)
+		if endErr != nil {
+			return repository.RequestFilters{}, endErr
+		}
+		end = end.UTC()
+		filters.DateToExclusive = &end
+	}
+	return filters, nil
+}
+
+func parseCalendarDate(value string) (time.Time, error) {
+	parsed, err := time.Parse("2006-01-02", value)
+	if err != nil || parsed.Year() < 1 {
+		return time.Time{}, fmt.Errorf("invalid calendar date")
+	}
+	return parsed, nil
+}
+
+func localDayStart(date time.Time, location *time.Location) (time.Time, error) {
+	year, month, day := date.Date()
+	for hour := 0; hour < 24; hour++ {
+		candidate := time.Date(year, month, day, hour, 0, 0, 0, location)
+		candidateYear, candidateMonth, candidateDay := candidate.In(location).Date()
+		if candidateYear == year && candidateMonth == month && candidateDay == day {
+			return candidate, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("calendar day %04d-%02d-%02d does not exist in America/Sao_Paulo", year, month, day)
 }
 
 func validateRequestChanges(input UpdateRequestInput) (repository.RequestChanges, error) {

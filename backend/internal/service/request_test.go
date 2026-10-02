@@ -27,6 +27,10 @@ type requestRepositoryStub struct {
 	statusValue        string
 	statusResult       domain.Request
 	statusErr          error
+	listFilters        repository.RequestFilters
+	listItems          []domain.Request
+	listTotal          int64
+	listErr            error
 }
 
 func (stub *requestRepositoryStub) Create(_ context.Context, requesterID int64, title, description, category string) (domain.Request, error) {
@@ -39,6 +43,11 @@ func (stub *requestRepositoryStub) Create(_ context.Context, requesterID int64, 
 
 func (stub *requestRepositoryStub) FindByID(context.Context, int64) (domain.Request, error) {
 	return stub.findResult, stub.findErr
+}
+
+func (stub *requestRepositoryStub) List(_ context.Context, filters repository.RequestFilters) ([]domain.Request, int64, error) {
+	stub.listFilters = filters
+	return stub.listItems, stub.listTotal, stub.listErr
 }
 
 func (stub *requestRepositoryStub) UpdateOwnedOpen(_ context.Context, _, _ int64, changes repository.RequestChanges) (domain.Request, error) {
@@ -270,5 +279,93 @@ func TestUpdateRequestStatusValidatesPayloadAndMapsMissingResource(t *testing.T)
 	})
 	if !errors.Is(err, ErrRequestNotFound) {
 		t.Fatalf("error = %v, want ErrRequestNotFound", err)
+	}
+}
+
+func TestListRequestsBuildsCombinedFiltersAndPagination(t *testing.T) {
+	repositoryStub := &requestRepositoryStub{
+		listItems: []domain.Request{exampleRequest(1, domain.StatusOpen)},
+		listTotal: 5,
+	}
+	result, err := NewRequest(repositoryStub).List(context.Background(), ListRequestsInput{
+		DateFrom: "2026-10-01", DateTo: "2026-10-01",
+		Category: " ti ", Status: " aberto ", Query: "  Requisição ágil  ",
+		Page: 3, PageSize: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	filters := repositoryStub.listFilters
+	if filters.DateFrom == nil || filters.DateFrom.Format(time.RFC3339) != "2026-10-01T03:00:00Z" {
+		t.Fatalf("date_from = %v", filters.DateFrom)
+	}
+	if filters.DateToExclusive == nil || filters.DateToExclusive.Format(time.RFC3339) != "2026-10-02T03:00:00Z" {
+		t.Fatalf("date_to exclusive = %v", filters.DateToExclusive)
+	}
+	if filters.Category != domain.CategoryTI || filters.Status != domain.StatusOpen || filters.TitleQuery != "Requisição ágil" || filters.Limit != 2 || filters.Offset != 4 {
+		t.Fatalf("filters = %+v", filters)
+	}
+	if result.Page != 3 || result.PageSize != 2 || result.TotalItems != 5 || result.TotalPages != 3 || len(result.Items) != 1 {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestListRequestsDateBoundsAreIndependentAndCalendarBased(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    ListRequestsInput
+		wantFrom string
+		wantTo   string
+	}{
+		{name: "only from", input: ListRequestsInput{DateFrom: "2026-10-02", Page: 1, PageSize: 20}, wantFrom: "2026-10-02T03:00:00Z"},
+		{name: "only to", input: ListRequestsInput{DateTo: "2026-10-02", Page: 1, PageSize: 20}, wantTo: "2026-10-03T03:00:00Z"},
+		{name: "dst end day", input: ListRequestsInput{DateFrom: "2019-02-16", DateTo: "2019-02-16", Page: 1, PageSize: 20}, wantFrom: "2019-02-16T02:00:00Z", wantTo: "2019-02-17T03:00:00Z"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repositoryStub := &requestRepositoryStub{}
+			if _, err := NewRequest(repositoryStub).List(context.Background(), test.input); err != nil {
+				t.Fatal(err)
+			}
+			if test.wantFrom == "" && repositoryStub.listFilters.DateFrom != nil {
+				t.Fatalf("unexpected date_from = %v", repositoryStub.listFilters.DateFrom)
+			}
+			if test.wantFrom != "" && (repositoryStub.listFilters.DateFrom == nil || repositoryStub.listFilters.DateFrom.Format(time.RFC3339) != test.wantFrom) {
+				t.Fatalf("date_from = %v, want %s", repositoryStub.listFilters.DateFrom, test.wantFrom)
+			}
+			if test.wantTo == "" && repositoryStub.listFilters.DateToExclusive != nil {
+				t.Fatalf("unexpected date_to = %v", repositoryStub.listFilters.DateToExclusive)
+			}
+			if test.wantTo != "" && (repositoryStub.listFilters.DateToExclusive == nil || repositoryStub.listFilters.DateToExclusive.Format(time.RFC3339) != test.wantTo) {
+				t.Fatalf("date_to = %v, want %s", repositoryStub.listFilters.DateToExclusive, test.wantTo)
+			}
+		})
+	}
+}
+
+func TestListRequestsRejectsInvalidFilters(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     ListRequestsInput
+		wantField string
+	}{
+		{name: "impossible from", input: ListRequestsInput{DateFrom: "2026-02-30", Page: 1, PageSize: 20}, wantField: "date_from"},
+		{name: "year zero", input: ListRequestsInput{DateFrom: "0000-01-01", Page: 1, PageSize: 20}, wantField: "date_from"},
+		{name: "wrong date shape", input: ListRequestsInput{DateTo: "02/10/2026", Page: 1, PageSize: 20}, wantField: "date_to"},
+		{name: "inverted range", input: ListRequestsInput{DateFrom: "2026-10-03", DateTo: "2026-10-02", Page: 1, PageSize: 20}, wantField: "date_to"},
+		{name: "category", input: ListRequestsInput{Category: "juridico", Page: 1, PageSize: 20}, wantField: "category"},
+		{name: "status", input: ListRequestsInput{Status: "cancelado", Page: 1, PageSize: 20}, wantField: "status"},
+		{name: "long query", input: ListRequestsInput{Query: strings.Repeat("á", 151), Page: 1, PageSize: 20}, wantField: "q"},
+		{name: "page", input: ListRequestsInput{Page: 0, PageSize: 20}, wantField: "page"},
+		{name: "page size", input: ListRequestsInput{Page: 1, PageSize: 101}, wantField: "page_size"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := NewRequest(&requestRepositoryStub{}).List(context.Background(), test.input)
+			var validationErr *ValidationError
+			if !errors.As(err, &validationErr) || len(validationErr.Fields[test.wantField]) == 0 {
+				t.Fatalf("error = %v, want field %s", err, test.wantField)
+			}
+		})
 	}
 }

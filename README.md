@@ -1,6 +1,6 @@
 # Portal de Solicitações Internas
 
-Base executável do desafio técnico da bit Soluções. Nesta etapa existem autenticação persistente por cookie, CRUD individual e mudança de status reais, infraestrutura compartilhada da API, probes, contrato OpenAPI, PostgreSQL, migrations, seed e uma página React de confirmação. Listagem/filtros, dashboard, metadata e telas autenticadas ainda não foram implementados.
+Base executável do desafio técnico da bit Soluções. Nesta etapa existem autenticação persistente por cookie, CRUD, mudança de status e listagem/filtros reais, infraestrutura compartilhada da API, probes, contrato OpenAPI, PostgreSQL, migrations, seed e uma página React de confirmação. Dashboard, metadata e telas autenticadas ainda não foram implementados.
 
 ## Pré-requisitos fixados
 
@@ -35,7 +35,7 @@ Os valores fornecidos são apenas de demonstração local. `DATABASE_URL` é obr
 
 ## Contrato HTTP
 
-O contrato está em `docs/openapi.yaml`, com explicações em `docs/API.md`. Probes, login/logout/me, CRUD individual e mudança de status são reais. Metadata, listagem e dashboard permanecem planejados; sem sessão retornam `401` e, autenticados, `404 route_not_found` até receberem handlers reais.
+O contrato está em `docs/openapi.yaml`, com explicações em `docs/API.md`. Probes, login/logout/me, CRUD, status e listagem/filtros são reais. Metadata e dashboard permanecem planejados; sem sessão retornam `401` e, autenticados, `404 route_not_found` até receberem handlers reais.
 
 A infraestrutura oferece JSON estrito limitado a 1 MiB, erros estruturados, validação de IDs/paginação, request ID, logs seguros, recuperação de panic e proteção de origem. Login/logout e POST/PATCH/DELETE de solicitações exigem `Origin`; futuras mutações seguirão a mesma regra. Não existe sucesso simulado.
 
@@ -61,6 +61,16 @@ curl -i -b /tmp/portal-cookies.txt \
 
 curl -i -b /tmp/portal-cookies.txt \
   http://127.0.0.1:8080/api/v1/requests/1
+
+curl -i -b /tmp/portal-cookies.txt --get \
+  --data-urlencode 'date_from=2026-10-01' \
+  --data-urlencode 'date_to=2026-10-31' \
+  --data-urlencode 'category=ti' \
+  --data-urlencode 'status=aberto' \
+  --data-urlencode 'q=acesso' \
+  --data-urlencode 'page=1' \
+  --data-urlencode 'page_size=20' \
+  http://127.0.0.1:8080/api/v1/requests
 
 curl -i -b /tmp/portal-cookies.txt \
   -X PATCH \

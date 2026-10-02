@@ -45,6 +45,7 @@ func NewRouter(db databasePinger, cfg RouterConfig) http.Handler {
 	mux.Handle("POST /api/v1/auth/logout", originGuard(http.HandlerFunc(auth.logout)))
 	mux.Handle("GET /api/v1/auth/me", auth.requireAuthentication(http.HandlerFunc(auth.me)))
 	mux.Handle("POST /api/v1/requests", auth.requireAuthentication(originGuard(http.HandlerFunc(requests.create))))
+	mux.Handle("GET /api/v1/requests", auth.requireAuthentication(http.HandlerFunc(requests.list)))
 	mux.Handle("GET /api/v1/requests/{id}", auth.requireAuthentication(http.HandlerFunc(requests.get)))
 	mux.Handle("PATCH /api/v1/requests/{id}", auth.requireAuthentication(originGuard(http.HandlerFunc(requests.update))))
 	mux.Handle("DELETE /api/v1/requests/{id}", auth.requireAuthentication(originGuard(http.HandlerFunc(requests.delete))))

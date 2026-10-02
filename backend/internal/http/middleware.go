@@ -120,6 +120,9 @@ func routeName(request *http.Request) string {
 	if request.Method == http.MethodPost && request.URL.Path == "/api/v1/requests" {
 		return "POST /api/v1/requests"
 	}
+	if request.Method == http.MethodGet && request.URL.Path == "/api/v1/requests" {
+		return "GET /api/v1/requests"
+	}
 	requestSuffix := strings.TrimPrefix(request.URL.Path, "/api/v1/requests/")
 	if request.Method == http.MethodPatch && strings.HasSuffix(requestSuffix, "/status") {
 		requestID := strings.TrimSuffix(requestSuffix, "/status")

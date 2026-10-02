@@ -17,6 +17,7 @@ import (
 
 type requestService interface {
 	Create(context.Context, int64, service.CreateRequestInput) (service.RequestResult, error)
+	List(context.Context, service.ListRequestsInput) (service.RequestListResult, error)
 	Get(context.Context, int64, int64) (service.RequestResult, error)
 	Update(context.Context, int64, int64, service.UpdateRequestInput) (service.RequestResult, error)
 	Delete(context.Context, int64, int64) error
@@ -66,6 +67,28 @@ type requestResponse struct {
 	Data requestData `json:"data"`
 }
 
+type requestListResponse struct {
+	Items      []requestListItem `json:"items"`
+	Pagination listPagination    `json:"pagination"`
+}
+
+type requestListItem struct {
+	ID        int64        `json:"id"`
+	Code      string       `json:"code"`
+	Title     string       `json:"title"`
+	Category  labeledValue `json:"category"`
+	Requester userData     `json:"requester"`
+	CreatedAt time.Time    `json:"created_at"`
+	Status    labeledValue `json:"status"`
+}
+
+type listPagination struct {
+	Page       int   `json:"page"`
+	PageSize   int   `json:"page_size"`
+	TotalItems int64 `json:"total_items"`
+	TotalPages int64 `json:"total_pages"`
+}
+
 type requestData struct {
 	ID          int64             `json:"id"`
 	Code        string            `json:"code"`
@@ -110,6 +133,73 @@ func (handler *requestHandler) create(response http.ResponseWriter, request *htt
 	}
 	response.Header().Set("Location", "/api/v1/requests/"+strconv.FormatInt(result.Request.ID, 10))
 	writeJSON(response, http.StatusCreated, requestResponse{Data: presentRequest(result)})
+}
+
+func (handler *requestHandler) list(response http.ResponseWriter, request *http.Request) {
+	input, err := parseRequestListInput(request)
+	if err != nil {
+		writeRequestError(response, request, err)
+		return
+	}
+	result, err := handler.service.List(request.Context(), input)
+	if err != nil {
+		var validationErr *service.ValidationError
+		if errors.As(err, &validationErr) {
+			writeError(response, request, http.StatusBadRequest, "invalid_query_parameter", "Um ou mais parâmetros de consulta são inválidos.", fieldErrors(validationErr.Fields))
+			return
+		}
+		writeInternalError(handler.logger, response, request, err)
+		return
+	}
+
+	items := make([]requestListItem, 0, len(result.Items))
+	for _, item := range result.Items {
+		categoryLabel, _ := domain.CategoryLabel(item.Category)
+		statusLabel, _ := domain.StatusLabel(item.Status)
+		items = append(items, requestListItem{
+			ID: item.ID, Code: fmt.Sprintf("SOL-%06d", item.ID), Title: item.Title,
+			Category:  labeledValue{Value: item.Category, Label: categoryLabel},
+			Requester: presentUser(item.Requester), CreatedAt: item.CreatedAt.UTC(),
+			Status: labeledValue{Value: item.Status, Label: statusLabel},
+		})
+	}
+	writeJSON(response, http.StatusOK, requestListResponse{
+		Items: items,
+		Pagination: listPagination{
+			Page: result.Page, PageSize: result.PageSize,
+			TotalItems: result.TotalItems, TotalPages: result.TotalPages,
+		},
+	})
+}
+
+func parseRequestListInput(request *http.Request) (service.ListRequestsInput, error) {
+	values := request.URL.Query()
+	if err := rejectUnknownQueryParameters(values, "date_from", "date_to", "category", "status", "q", "page", "page_size"); err != nil {
+		return service.ListRequestsInput{}, err
+	}
+	page, err := parsePagination(values)
+	if err != nil {
+		return service.ListRequestsInput{}, err
+	}
+	input := service.ListRequestsInput{Page: page.Page, PageSize: page.PageSize}
+	parameters := []struct {
+		name        string
+		destination *string
+	}{
+		{name: "date_from", destination: &input.DateFrom},
+		{name: "date_to", destination: &input.DateTo},
+		{name: "category", destination: &input.Category},
+		{name: "status", destination: &input.Status},
+		{name: "q", destination: &input.Query},
+	}
+	for _, parameter := range parameters {
+		value, parseErr := parseSingleOptionalQuery(values, parameter.name)
+		if parseErr != nil {
+			return service.ListRequestsInput{}, parseErr
+		}
+		*parameter.destination = value
+	}
+	return input, nil
 }
 
 func (handler *requestHandler) get(response http.ResponseWriter, request *http.Request) {

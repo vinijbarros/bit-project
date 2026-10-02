@@ -19,10 +19,15 @@ type stubRequestService struct {
 	update func(context.Context, int64, int64, service.UpdateRequestInput) (service.RequestResult, error)
 	delete func(context.Context, int64, int64) error
 	status func(context.Context, int64, int64, service.UpdateRequestStatusInput) (service.RequestResult, error)
+	list   func(context.Context, service.ListRequestsInput) (service.RequestListResult, error)
 }
 
 func (stub stubRequestService) Create(ctx context.Context, userID int64, input service.CreateRequestInput) (service.RequestResult, error) {
 	return stub.create(ctx, userID, input)
+}
+
+func (stub stubRequestService) List(ctx context.Context, input service.ListRequestsInput) (service.RequestListResult, error) {
+	return stub.list(ctx, input)
 }
 
 func (stub stubRequestService) Get(ctx context.Context, id, userID int64) (service.RequestResult, error) {
@@ -297,5 +302,87 @@ func TestUpdateStatusRequiresAuthenticationOriginAndExistingID(t *testing.T) {
 	router.ServeHTTP(missingResponse, authenticatedRequest(http.MethodPatch, "/api/v1/requests/999/status", body))
 	if missingResponse.Code != http.StatusNotFound || called != 1 {
 		t.Fatalf("missing status/calls = %d/%d body=%s", missingResponse.Code, called, missingResponse.Body.String())
+	}
+}
+
+func TestListRequestsReturnsExactSummaryAndPagination(t *testing.T) {
+	requests := stubRequestService{list: func(_ context.Context, input service.ListRequestsInput) (service.RequestListResult, error) {
+		if input.DateFrom != "2026-10-01" || input.DateTo != "2026-10-02" || input.Category != "ti" || input.Status != "aberto" || input.Query != "ácesso_%" || input.Page != 2 || input.PageSize != 1 {
+			t.Fatalf("input = %+v", input)
+		}
+		item := requestHTTPResult(2, domain.StatusOpen).Request
+		return service.RequestListResult{Items: []domain.Request{item}, Page: 2, PageSize: 1, TotalItems: 3, TotalPages: 3}, nil
+	}}
+	response := httptest.NewRecorder()
+	requestRouter(requests).ServeHTTP(response, authenticatedRequest(http.MethodGet, "/api/v1/requests?date_from=2026-10-01&date_to=2026-10-02&category=ti&status=aberto&q=%C3%A1cesso_%25&page=2&page_size=1", ""))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status/body = %d %s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, expected := range []string{`"items":[`, `"code":"SOL-000042"`, `"requester":{"id":2,"username":"colaborador1","display_name":"Colaborador 1"}`, `"created_at":"2026-10-02T15:00:00Z"`, `"pagination":{"page":2,"page_size":1,"total_items":3,"total_pages":3}`} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("body = %s, missing %s", body, expected)
+		}
+	}
+	for _, forbidden := range []string{"description", "updated_at", "permissions", "password_hash", "token_hash"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("body contains forbidden list field %q: %s", forbidden, body)
+		}
+	}
+}
+
+func TestListRequestsUsesDefaultsAndReturnsEmptyItems(t *testing.T) {
+	requests := stubRequestService{list: func(_ context.Context, input service.ListRequestsInput) (service.RequestListResult, error) {
+		if input.Page != 1 || input.PageSize != 20 {
+			t.Fatalf("input = %+v", input)
+		}
+		return service.RequestListResult{Items: nil, Page: 1, PageSize: 20}, nil
+	}}
+	response := httptest.NewRecorder()
+	requestRouter(requests).ServeHTTP(response, authenticatedRequest(http.MethodGet, "/api/v1/requests?category=&q=%20%20", ""))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"items":[]`) {
+		t.Fatalf("status/body = %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestListRequestsRejectsAmbiguousAndInvalidQuery(t *testing.T) {
+	requests := stubRequestService{list: func(_ context.Context, input service.ListRequestsInput) (service.RequestListResult, error) {
+		if input.Category == "invalida" {
+			return service.RequestListResult{}, &service.ValidationError{Fields: map[string][]string{"category": {"Escolha uma categoria válida."}}}
+		}
+		t.Fatal("service must not run for syntactically invalid query")
+		return service.RequestListResult{}, nil
+	}}
+	tests := []struct {
+		name   string
+		target string
+		field  string
+	}{
+		{name: "repeated", target: "/api/v1/requests?status=aberto&status=concluido", field: "status"},
+		{name: "invalid integer", target: "/api/v1/requests?page=um", field: "page"},
+		{name: "page size limit", target: "/api/v1/requests?page_size=101", field: "page_size"},
+		{name: "unknown", target: "/api/v1/requests?sort=title", field: "query"},
+		{name: "service validation", target: "/api/v1/requests?category=invalida", field: "category"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			requestRouter(requests).ServeHTTP(response, authenticatedRequest(http.MethodGet, test.target, ""))
+			if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `"code":"invalid_query_parameter"`) || !strings.Contains(response.Body.String(), `"`+test.field+`":`) {
+				t.Fatalf("status/body = %d %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestListRequestsRequiresAuthentication(t *testing.T) {
+	requests := stubRequestService{list: func(context.Context, service.ListRequestsInput) (service.RequestListResult, error) {
+		t.Fatal("service must not run anonymously")
+		return service.RequestListResult{}, nil
+	}}
+	response := httptest.NewRecorder()
+	requestRouter(requests).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/requests", nil))
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("status/body = %d %s", response.Code, response.Body.String())
 	}
 }
