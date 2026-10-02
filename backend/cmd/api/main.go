@@ -43,6 +43,8 @@ func main() {
 		SessionDuration: cfg.Auth.SessionDuration,
 		TokenBytes:      cfg.Auth.SessionTokenBytes,
 	})
+	requestRepository := repository.NewRequest(db)
+	requestService := service.NewRequest(requestRepository)
 
 	server := &http.Server{
 		Addr: cfg.HTTP.Address,
@@ -50,6 +52,7 @@ func main() {
 			ReadinessTimeout: cfg.Database.ConnectTimeout,
 			Logger:           logger,
 			AuthService:      authService,
+			RequestService:   requestService,
 			TrustedOrigins:   cfg.TrustedOrigins,
 			SessionCookie: httpapi.SessionCookieConfig(
 				cfg.Auth.CookieName,

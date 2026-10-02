@@ -117,6 +117,26 @@ func routeName(request *http.Request) string {
 	if request.Method == http.MethodGet && request.URL.Path == "/api/v1/auth/me" {
 		return "GET /api/v1/auth/me"
 	}
+	if request.Method == http.MethodPost && request.URL.Path == "/api/v1/requests" {
+		return "POST /api/v1/requests"
+	}
+	requestSuffix := strings.TrimPrefix(request.URL.Path, "/api/v1/requests/")
+	if request.Method == http.MethodPatch && strings.HasSuffix(requestSuffix, "/status") {
+		requestID := strings.TrimSuffix(requestSuffix, "/status")
+		if requestID != "" && !strings.Contains(requestID, "/") {
+			return "PATCH /api/v1/requests/{id}/status"
+		}
+	}
+	if requestSuffix != request.URL.Path && requestSuffix != "" && !strings.Contains(requestSuffix, "/") {
+		switch request.Method {
+		case http.MethodGet:
+			return "GET /api/v1/requests/{id}"
+		case http.MethodPatch:
+			return "PATCH /api/v1/requests/{id}"
+		case http.MethodDelete:
+			return "DELETE /api/v1/requests/{id}"
+		}
+	}
 	if strings.HasPrefix(request.URL.Path, "/api/") {
 		return "/api/*"
 	}

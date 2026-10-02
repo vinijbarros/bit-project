@@ -15,6 +15,7 @@ type RouterConfig struct {
 	ReadinessTimeout time.Duration
 	Logger           *slog.Logger
 	AuthService      authService
+	RequestService   requestService
 	TrustedOrigins   []string
 	SessionCookie    sessionCookieConfig
 	LoginRateLimit   loginRateLimitConfig
@@ -36,12 +37,18 @@ func NewRouter(db databasePinger, cfg RouterConfig) http.Handler {
 		limiter: newLoginRateLimiter(cfg.LoginRateLimit),
 		logger:  logger,
 	}
+	requests := &requestHandler{service: cfg.RequestService, logger: logger}
 	originGuard := func(next http.Handler) http.Handler {
 		return requireTrustedOrigin(trustedOriginSet(cfg.TrustedOrigins), next)
 	}
 	mux.Handle("POST /api/v1/auth/login", originGuard(http.HandlerFunc(auth.login)))
 	mux.Handle("POST /api/v1/auth/logout", originGuard(http.HandlerFunc(auth.logout)))
 	mux.Handle("GET /api/v1/auth/me", auth.requireAuthentication(http.HandlerFunc(auth.me)))
+	mux.Handle("POST /api/v1/requests", auth.requireAuthentication(originGuard(http.HandlerFunc(requests.create))))
+	mux.Handle("GET /api/v1/requests/{id}", auth.requireAuthentication(http.HandlerFunc(requests.get)))
+	mux.Handle("PATCH /api/v1/requests/{id}", auth.requireAuthentication(originGuard(http.HandlerFunc(requests.update))))
+	mux.Handle("DELETE /api/v1/requests/{id}", auth.requireAuthentication(originGuard(http.HandlerFunc(requests.delete))))
+	mux.Handle("PATCH /api/v1/requests/{id}/status", auth.requireAuthentication(originGuard(http.HandlerFunc(requests.updateStatus))))
 	mux.Handle("/api/", auth.requireAuthentication(http.HandlerFunc(apiNotFound)))
 
 	return requestID(requestLog(logger, recoverPanics(logger, mux)))

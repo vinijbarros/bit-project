@@ -1,6 +1,6 @@
 # Portal de Solicitações Internas
 
-Base executável do desafio técnico da bit Soluções. Nesta etapa existem autenticação persistente por cookie, infraestrutura compartilhada da API, probes, contrato OpenAPI, PostgreSQL, migrations, seed e uma página React de confirmação. Dashboard, metadata, CRUD de solicitações e telas autenticadas ainda não foram implementados.
+Base executável do desafio técnico da bit Soluções. Nesta etapa existem autenticação persistente por cookie, CRUD individual e mudança de status reais, infraestrutura compartilhada da API, probes, contrato OpenAPI, PostgreSQL, migrations, seed e uma página React de confirmação. Listagem/filtros, dashboard, metadata e telas autenticadas ainda não foram implementados.
 
 ## Pré-requisitos fixados
 
@@ -35,9 +35,9 @@ Os valores fornecidos são apenas de demonstração local. `DATABASE_URL` é obr
 
 ## Contrato HTTP
 
-O contrato está em `docs/openapi.yaml`, com explicações em `docs/API.md`. `GET /healthz`, `GET /readyz`, login, logout e `/auth/me` são reais. Metadata, solicitações e dashboard permanecem planejados; sem sessão retornam `401` e, autenticados, `404 route_not_found` até receberem handlers reais.
+O contrato está em `docs/openapi.yaml`, com explicações em `docs/API.md`. Probes, login/logout/me, CRUD individual e mudança de status são reais. Metadata, listagem e dashboard permanecem planejados; sem sessão retornam `401` e, autenticados, `404 route_not_found` até receberem handlers reais.
 
-A infraestrutura oferece JSON estrito limitado a 1 MiB, erros estruturados, validação de IDs/paginação, request ID, logs seguros, recuperação de panic e proteção de origem. Login/logout já exigem `Origin`; futuras mutações seguirão a mesma regra. Não existe sucesso simulado.
+A infraestrutura oferece JSON estrito limitado a 1 MiB, erros estruturados, validação de IDs/paginação, request ID, logs seguros, recuperação de panic e proteção de origem. Login/logout e POST/PATCH/DELETE de solicitações exigem `Origin`; futuras mutações seguirão a mesma regra. Não existe sucesso simulado.
 
 ## Autenticação local
 
@@ -52,6 +52,22 @@ curl -i -c /tmp/portal-cookies.txt \
 
 curl -i -b /tmp/portal-cookies.txt \
   http://127.0.0.1:8080/api/v1/auth/me
+
+curl -i -b /tmp/portal-cookies.txt \
+  -H 'Content-Type: application/json' \
+  -H 'Origin: http://127.0.0.1:5173' \
+  --data '{"title":"Acesso ao sistema","description":"Solicito acesso ao ambiente interno.","category":"ti"}' \
+  http://127.0.0.1:8080/api/v1/requests
+
+curl -i -b /tmp/portal-cookies.txt \
+  http://127.0.0.1:8080/api/v1/requests/1
+
+curl -i -b /tmp/portal-cookies.txt \
+  -X PATCH \
+  -H 'Content-Type: application/json' \
+  -H 'Origin: http://127.0.0.1:5173' \
+  --data '{"status":"em_atendimento"}' \
+  http://127.0.0.1:8080/api/v1/requests/1/status
 
 curl -i -b /tmp/portal-cookies.txt \
   -H 'Origin: http://127.0.0.1:5173' \
@@ -189,4 +205,4 @@ O seed cria cinco solicitações sintéticas, com as cinco categorias, os três 
 | Dúvida sobre reembolso de viagem | `colaborador2` |
 | Ajuste de iluminação da sala | `colaborador1` |
 
-Essas datas retroativas são uma capacidade exclusiva do seed. A criação normal pela futura API definirá `created_at` no backend e não aceitará esse campo do cliente. Registros alheios ao seed são preservados, e solicitações reais podem ter títulos repetidos. Uma base sem solicitações continua sendo um estado válido e o frontend não depende do seed. Os hashes ficam prontos para o login futuro, mas o login HTTP ainda não está implementado nesta etapa.
+Essas datas retroativas são uma capacidade exclusiva do seed. A criação normal pela API define `created_at` no backend e rejeita esse campo quando enviado pelo cliente. Registros alheios ao seed são preservados, e solicitações reais podem ter títulos repetidos. Uma base sem solicitações continua sendo um estado válido e o frontend não depende do seed. Os hashes são usados pelo login HTTP implementado.
