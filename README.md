@@ -1,13 +1,13 @@
 # Portal de Solicitações Internas
 
-Portal em desenvolvimento para o desafio técnico da bit Soluções. O backend já oferece autenticação persistente, metadata, CRUD, status, listagem/filtros e dashboard reais. O frontend possui login completo, recuperação da sessão por cookie, rotas protegidas, logout, listagem responsiva com filtros/paginação e consulta de detalhes; criação, edição e dashboard ainda são placeholders explícitos.
+Portal de Solicitações Internas em desenvolvimento para o desafio técnico da bit Soluções. Backend e frontend já oferecem autenticação persistente, metadata, CRUD autorizado, status, listagem/filtros e dashboard global consumindo dados reais da API. A execução completa com Docker Compose também está disponível; as etapas restantes concentram CI, documentação/evidências finais e revisão de entrega.
 
 ## Pré-requisitos fixados
 
 - Go 1.22.2.
 - Node.js 24.14.0 e npm 11.9.0.
 - PostgreSQL 17; o Compose usa a imagem `postgres:17.6-alpine`.
-- Docker com Compose para iniciar o banco pelo alvo `db-up`.
+- Docker com Compose v2 para iniciar a aplicação completa.
 - Make 4.3 é opcional; há comandos equivalentes abaixo.
 
 As dependências exatas ficam em `backend/go.mod`, `backend/go.sum`, `frontend/package.json` e `frontend/package-lock.json`. Atualizações devem ser deliberadas, compatíveis com as versões acima e registradas em `docs/DECISOES.md`.
@@ -16,11 +16,12 @@ As dependências exatas ficam em `backend/go.mod`, `backend/go.sum`, `frontend/p
 
 | Serviço | Endereço local |
 | --- | --- |
+| Frontend Docker/Nginx | `http://127.0.0.1:8080` |
 | Frontend Vite | `http://127.0.0.1:5173` |
-| API Go | `http://127.0.0.1:8080` |
+| API Go sem Docker | `http://127.0.0.1:8080` |
 | PostgreSQL | `127.0.0.1:5432` |
 
-O frontend usa URLs relativas sob `/api/v1`. Em desenvolvimento, o Vite encaminha `/api` para `http://127.0.0.1:8080`, evitando CORS e mantendo o cookie de sessão no fluxo same-origin. `TRUSTED_ORIGINS` recebe uma lista de origens HTTP(S) exatas, separadas por vírgula; o padrão local é `http://127.0.0.1:5173`.
+O frontend usa URLs relativas sob `/api/v1`. No Compose, Nginx encaminha `/api` para a API interna e o navegador usa somente `http://127.0.0.1:8080`. No desenvolvimento sem Docker, o Vite encaminha `/api` para `http://127.0.0.1:8080`. `TRUSTED_ORIGINS`/`COMPOSE_TRUSTED_ORIGINS` recebem origens HTTP(S) exatas, sem curingas.
 
 ## Configuração
 
@@ -94,7 +95,23 @@ set -a
 set +a
 ```
 
-## Execução com Make
+## Execução completa com Docker Compose
+
+```sh
+cp .env.example .env
+docker compose up -d --build --wait
+DEMO_SEED_ENABLED=true docker compose --profile demo run --rm seed
+```
+
+Abra `http://127.0.0.1:8080`. O PostgreSQL fica persistido em volume, migrations são aplicadas por uma tarefa que termina antes da API e o seed nunca roda silenciosamente. Para encerrar preservando os dados:
+
+```sh
+docker compose down
+```
+
+Instruções de configuração, reset deliberado, alternativa sem Docker e preparação HTTPS estão em `docs/DEPLOY.md`.
+
+## Execução de desenvolvimento com Make
 
 ```sh
 make db-up
@@ -109,7 +126,7 @@ make frontend-install
 make frontend-dev
 ```
 
-A composição desta etapa inicia somente PostgreSQL. API e frontend serão adicionados ao Compose completo na etapa final de infraestrutura.
+Esses alvos iniciam os processos de desenvolvimento fora dos containers. Para a composição completa, use `make compose-up`, `make compose-seed` e `make compose-down`.
 
 ## Comandos equivalentes sem Make
 

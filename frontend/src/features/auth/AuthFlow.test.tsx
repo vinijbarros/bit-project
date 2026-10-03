@@ -188,6 +188,16 @@ describe('fluxo de autenticação', () => {
     expect(screen.queryByText('Detalhe protegido')).toBeNull()
   })
 
+  it('identifica a seção atual também nas rotas de detalhe', async () => {
+    authMocks.currentUser.mockResolvedValue(user)
+    renderAuthApp('/solicitacoes/7')
+
+    await screen.findByText('Detalhe protegido')
+    expect(screen.getByRole('link', { name: 'Solicitações' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('link', { name: 'Dashboard' }).getAttribute('aria-current')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Pular para o conteúdo principal' }).getAttribute('href')).toBe('#conteudo-principal')
+  })
+
   it('exibe indisponibilidade de /me e permite repetir sem fingir logout', async () => {
     authMocks.currentUser
       .mockRejectedValueOnce(new ApiError({ status: 500, code: 'internal_error', message: 'Erro interno inesperado.' }))

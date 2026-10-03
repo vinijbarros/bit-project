@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
 import { CategoryBadge, StatusBadge } from '../components/badges/ValueBadge'
 import { EmptyState } from '../components/feedback/EmptyState'
+import { AlertMessage } from '../components/feedback/AlertMessage'
 import { ErrorState } from '../components/feedback/ErrorState'
 import { LoadingState } from '../components/feedback/LoadingState'
 import { FormField } from '../components/forms/FormField'
@@ -64,6 +65,7 @@ function RequestsTable({ items, returnPath }: { items: RequestListItem[]; return
 }
 
 export function RequestsPage() {
+  const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const queryKey = searchParams.toString()
   const filters = useMemo(() => filtersFromSearchParams(searchParams), [searchParams])
@@ -153,6 +155,8 @@ export function RequestsPage() {
 
   const isLoading = loadingMetadata || loadingRequests
   const activeFilters = hasRequestFilters(searchParams)
+  const locationState = (location.state ?? {}) as { message?: unknown }
+  const navigationMessage = typeof locationState.message === 'string' ? locationState.message : undefined
 
   return (
     <section aria-labelledby="requests-title">
@@ -163,6 +167,8 @@ export function RequestsPage() {
         description="Consulte solicitações de todos os usuários e filtre pelo período de abertura."
         actions={<Link className="button" to="/solicitacoes/nova">Nova solicitação</Link>}
       />
+
+      {navigationMessage && <AlertMessage tone="success">{navigationMessage}</AlertMessage>}
 
       <form className="filters-panel" onSubmit={applyFilters} noValidate aria-label="Filtros de solicitações">
         <div className="filters-grid">

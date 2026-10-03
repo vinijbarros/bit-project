@@ -38,7 +38,7 @@
 .nav-link:hover { background: var(--surface-muted); color: var(--brand-900); }
 .nav-link--active { background: #dceef3; color: var(--brand-900); }
 
-.app-content { width: 100%; max-width: 78rem; padding: clamp(1.25rem, 4vw, 3rem); }
+.app-content { width: 100%; min-width: 0; max-width: 78rem; padding: clamp(1.25rem, 4vw, 3rem); }
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 2rem; }
 .page-header p { max-width: 62ch; }
 .page-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
@@ -52,7 +52,18 @@
   .user-actions { align-items: flex-end; flex-direction: column; gap: .4rem; }
   .user-name { max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .app-body { display: block; }
-  .main-navigation { position: sticky; top: 0; z-index: 5; flex-direction: row; overflow-x: auto; padding: .65rem 1rem; border-right: 0; border-bottom: 1px solid var(--border); }
+  .main-navigation { position: sticky; top: 0; z-index: 5; flex-flow: row wrap; overflow-x: visible; padding: .65rem 1rem; border-right: 0; border-bottom: 1px solid var(--border); box-shadow: 0 .25rem .75rem rgb(16 47 66 / 6%); }
   .nav-link { flex: 0 0 auto; }
   .page-header { display: block; }
+  .page-actions { margin-top: 1rem; }
+}
+
+@media (max-width: 420px) {
+  .app-header { gap: .65rem; padding-inline: .75rem; }
+  .brand-block { gap: .55rem; }
+  .brand-mark { width: 2.35rem; height: 2.35rem; }
+  .brand-block span:last-child { display: none; }
+  .user-name { max-width: 7rem; }
+  .main-navigation { padding-inline: .75rem; }
+  .nav-link { flex: 1 1 calc(50% - .35rem); text-align: center; }
 }
