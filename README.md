@@ -1,6 +1,6 @@
 # Portal de Solicitações Internas
 
-Aplicação full stack desenvolvida para o desafio técnico da bit Soluções. Colaboradores autenticados registram demandas internas, consultam a visão global e acompanham cada solicitação até a conclusão. Os dados são persistidos em PostgreSQL; não há arrays locais simulando as funcionalidades.
+ Colaboradores autenticados registram demandas internas, consultam a visão global e acompanham cada solicitação até a conclusão. Os dados são persistidos em PostgreSQL; não há arrays locais simulando as funcionalidades.
 
 A interface identifica o portal pela marca **b1t**, uma referência visual ao bit binário representado por zero ou um.
 
