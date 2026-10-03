@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { MetadataOption, Category } from '../../types/api'
-import { unicodeLength, validateRequestForm } from './requestForm'
+import { unicodeLength, validateRequestForm } from './requestFormValidation'
 
 const categories: MetadataOption<Category>[] = [
   { value: 'ti', label: 'TI' },

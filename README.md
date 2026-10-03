@@ -1,6 +1,27 @@
 # Portal de Solicitações Internas
 
-Aplicação full stack desenvolvida para o desafio técnico da bit Soluções, com entrega prevista para 05/10/2026. Colaboradores autenticados registram demandas internas, consultam a visão global e acompanham cada solicitação até a conclusão.
+Aplicação full stack desenvolvida para o desafio técnico da bit Soluções. Colaboradores autenticados registram demandas internas, consultam a visão global e acompanham cada solicitação até a conclusão. Os dados são persistidos em PostgreSQL; não há arrays locais simulando as funcionalidades.
+
+A interface identifica o portal pela marca **b1t**, uma referência visual ao bit binário representado por zero ou um.
+
+## Sumário
+
+- [Funcionalidades e regras](#funcionalidades-e-regras)
+- [Stack e arquitetura](#stack-e-arquitetura)
+- [Decisões técnicas](#principais-decisões-técnicas)
+- [Pré-requisitos e configuração](#pré-requisitos-e-configuração)
+- [Execução com Docker](#execução-com-docker-compose)
+- [Execução sem Docker](#execução-sem-docker)
+- [Banco, migrations e seed](#banco-migrations-e-seed)
+- [Testes e CI](#testes-e-ci)
+- [API](#api)
+- [Deploy](#deploy)
+- [Troubleshooting](#troubleshooting)
+- [Evidências](#evidências)
+- [Limitações e melhorias](#limitações-e-melhorias-futuras)
+- [Uso de inteligência artificial](#uso-de-inteligência-artificial)
+
+## Funcionalidades e regras
 
 Funcionalidades entregues:
 
@@ -11,9 +32,10 @@ Funcionalidades entregues:
 - detalhes, alteração livre entre os três status e reabertura;
 - filtros combináveis por período, categoria, status e substring do título;
 - dashboard global com total, abertas, em atendimento e concluídas;
+- escolha entre modo claro e modo noturno, persistida somente no navegador;
 - estados de carga, vazio, validação, erro e sessão expirada em interface responsiva.
 
-## Regras de negócio e permissões
+### Regras de negócio e permissões
 
 O PDF exige autenticação, cadastro, edição e exclusão de solicitações abertas, acompanhamento por três status, filtros e dashboard. Ele não define autoria, papéis, fluxo obrigatório de status, paginação nem vários limites operacionais. Para preencher essas lacunas, a implementação adota explicitamente as regras abaixo; elas são decisões deste projeto, não exigências atribuídas à bit Soluções.
 
@@ -27,7 +49,7 @@ O PDF exige autenticação, cadastro, edição e exclusão de solicitações abe
 - A pesquisa textual procura somente uma substring do título, sem diferenciar maiúsculas de minúsculas; os filtros são combinados por `AND`.
 - A listagem usa paginação com 20 itens por padrão e máximo de 100. O código visual `SOL-000001` é calculado a partir do ID.
 
-## Stack
+## Stack e arquitetura
 
 - Backend: Go 1.22.2, `net/http`, `database/sql`, pgx 5.7.1, Goose 3.24.0 e bcrypt.
 - Banco: PostgreSQL 17.6.
@@ -35,7 +57,7 @@ O PDF exige autenticação, cadastro, edição e exclusão de solicitações abe
 - Distribuição: Docker/Compose, Nginx 1.27.4 e imagens multi-stage.
 - Qualidade: testes Go/`httptest`/PostgreSQL, Vitest, Testing Library, Playwright, ESLint, OpenAPI/Redocly e GitHub Actions.
 
-## Arquitetura
+### Visão geral
 
 A solução é uma aplicação única organizada em módulos, com frontend e backend separados. O navegador carrega a SPA React e chama caminhos relativos `/api/v1`; Vite encaminha essas chamadas no desenvolvimento e Nginx faz o mesmo na imagem final. A API Go aplica as regras e persiste no PostgreSQL.
 
@@ -75,7 +97,7 @@ frontend/
   src/services/          operações da API
   src/styles/            CSS responsivo
   src/types/             contratos TypeScript
-docs/                    contrato, decisões, testes e evidências
+docs/                    documentação principal, OpenAPI e evidências
 ```
 
 ## Principais decisões técnicas
@@ -94,7 +116,9 @@ docs/                    contrato, decisões, testes e evidências
 
 As justificativas, alternativas e compromissos completos estão no [Memorial Técnico de Desenvolvimento](docs/MEMORIAL_TECNICO_DE_DESENVOLVIMENTO.md).
 
-## Pré-requisitos fixados
+## Pré-requisitos e configuração
+
+### Pré-requisitos
 
 - Go 1.22.2.
 - Node.js 24.14.0 e npm 11.9.0.
@@ -103,9 +127,9 @@ As justificativas, alternativas e compromissos completos estão no [Memorial Té
 - Chromium e suas bibliotecas para executar E2E localmente; o Playwright pode instalá-los pelo comando documentado abaixo.
 - Make 4.3 é opcional; há comandos equivalentes abaixo.
 
-As dependências exatas ficam em `backend/go.mod`, `backend/go.sum`, `frontend/package.json` e `frontend/package-lock.json`. Atualizações devem ser deliberadas, compatíveis com as versões acima e registradas em `docs/DECISOES.md`.
+As dependências exatas ficam em `backend/go.mod`, `backend/go.sum`, `frontend/package.json` e `frontend/package-lock.json`. Os lockfiles devem ser preservados para instalação reproduzível.
 
-## Portas e origens locais
+### Portas e origens locais
 
 | Serviço | Endereço local |
 | --- | --- |
@@ -116,7 +140,7 @@ As dependências exatas ficam em `backend/go.mod`, `backend/go.sum`, `frontend/p
 
 O frontend usa URLs relativas sob `/api/v1`. No Compose, Nginx encaminha `/api` para a API interna e o navegador usa somente `http://127.0.0.1:8080`. No desenvolvimento sem Docker, o Vite encaminha `/api` para `http://127.0.0.1:8080`. `TRUSTED_ORIGINS`/`COMPOSE_TRUSTED_ORIGINS` recebem origens HTTP(S) exatas, sem curingas.
 
-## Configuração
+### Variáveis de ambiente
 
 Copie os exemplos e mantenha os arquivos reais fora do versionamento:
 
@@ -152,67 +176,6 @@ Os valores fornecidos são públicos e exclusivamente de demonstração local. `
 | `TEST_DATABASE_URL`, `TEST_DATABASE_ALLOW_RESET`, `TEST_POSTGRES_PORT` | Banco descartável e trava da integração | banco `_test`, `no`, `55435` |
 | `VITE_API_BASE_PATH` | Única variável pública do frontend; caminho relativo da API | `/api/v1` |
 
-## Contrato HTTP
-
-O contrato normativo está em [docs/openapi.yaml](docs/openapi.yaml), com explicações complementares em [docs/API.md](docs/API.md). A API oferece:
-
-| Área | Operações |
-| --- | --- |
-| Saúde | `GET /healthz` e `GET /readyz` públicos. |
-| Autenticação | Login, logout e recuperação do usuário atual. |
-| Metadados | Categorias e status com rótulos; exige sessão. |
-| Solicitações | Listagem/filtros, criação, detalhe, edição, exclusão e mudança de status; exige sessão. |
-| Dashboard | Contadores globais; exige sessão. |
-
-A infraestrutura oferece JSON estrito limitado a 1 MiB, erros estruturados, validação de IDs/paginação, request ID, logs seguros, recuperação de panic e proteção de origem. Login/logout e todas as mutações existentes exigem `Origin`. Não existe sucesso simulado.
-
-## Autenticação local
-
-Os exemplos abaixo assumem desenvolvimento sem Docker, com Vite em `5173`, API direta em `8080` e `TRUSTED_ORIGINS=http://127.0.0.1:5173`. No Compose, as mesmas URLs passam pelo Nginx em `8080`; nesse caso, substitua o cabeçalho `Origin` por `http://127.0.0.1:8080`.
-
-```sh
-curl -i -c /tmp/portal-cookies.txt \
-  -H 'Content-Type: application/json' \
-  -H 'Origin: http://127.0.0.1:5173' \
-  --data '{"username":"colaborador1","password":"DemoLocal-Colaborador1"}' \
-  http://127.0.0.1:8080/api/v1/auth/login
-
-curl -i -b /tmp/portal-cookies.txt \
-  http://127.0.0.1:8080/api/v1/auth/me
-
-curl -i -b /tmp/portal-cookies.txt \
-  -H 'Content-Type: application/json' \
-  -H 'Origin: http://127.0.0.1:5173' \
-  --data '{"title":"Acesso ao sistema","description":"Solicito acesso ao ambiente interno.","category":"ti"}' \
-  http://127.0.0.1:8080/api/v1/requests
-
-curl -i -b /tmp/portal-cookies.txt \
-  http://127.0.0.1:8080/api/v1/requests/1
-
-curl -i -b /tmp/portal-cookies.txt --get \
-  --data-urlencode 'date_from=2026-10-01' \
-  --data-urlencode 'date_to=2026-10-31' \
-  --data-urlencode 'category=ti' \
-  --data-urlencode 'status=aberto' \
-  --data-urlencode 'q=acesso' \
-  --data-urlencode 'page=1' \
-  --data-urlencode 'page_size=20' \
-  http://127.0.0.1:8080/api/v1/requests
-
-curl -i -b /tmp/portal-cookies.txt \
-  -X PATCH \
-  -H 'Content-Type: application/json' \
-  -H 'Origin: http://127.0.0.1:5173' \
-  --data '{"status":"em_atendimento"}' \
-  http://127.0.0.1:8080/api/v1/requests/1/status
-
-curl -i -b /tmp/portal-cookies.txt \
-  -H 'Origin: http://127.0.0.1:5173' \
-  -X POST http://127.0.0.1:8080/api/v1/auth/logout
-```
-
-A sessão tem expiração absoluta de 8 horas por padrão e não é renovada. O token original fica somente no cookie `HttpOnly`; o PostgreSQL armazena SHA-256. `SESSION_COOKIE_SECURE=false` é exclusivo do HTTP local e produção exige `true`. O limite padrão de login é 5 falhas por username/IP em 15 minutos; por ser em memória, não é compartilhado entre instâncias.
-
 Para carregar `.env` sem Make:
 
 ```sh
@@ -221,7 +184,7 @@ set -a
 set +a
 ```
 
-## Execução completa com Docker Compose
+## Execução com Docker Compose
 
 ```sh
 cp .env.example .env
@@ -235,7 +198,7 @@ Abra `http://127.0.0.1:8080`. O PostgreSQL fica persistido em volume, migrations
 docker compose down
 ```
 
-Instruções de configuração, reset deliberado, alternativa sem Docker e preparação HTTPS estão em [docs/DEPLOY.md](docs/DEPLOY.md).
+O volume `postgres_data` preserva o banco. `docker compose down --volumes` apaga esse volume e deve ser usado somente quando houver intenção explícita de reiniciar uma base local de demonstração; ele não faz parte do fluxo normal.
 
 ### Como usar a aplicação
 
@@ -247,10 +210,20 @@ Instruções de configuração, reset deliberado, alternativa sem Docker e prepa
 6. Enquanto a solicitação estiver aberta, seu autor verá as ações de edição e exclusão. Outro usuário ainda poderá consultar e mudar o status, mas não editar ou excluir.
 7. Use **Sair** para revogar a sessão no servidor.
 
-## Execução de desenvolvimento com Make
+## Execução sem Docker
+
+Esta alternativa pressupõe que o PostgreSQL 17 esteja instalado, iniciado e acessível conforme `DATABASE_URL`. Em uma instalação local nova, crie o usuário e o banco demonstrativos antes de aplicar as migrations:
 
 ```sh
-make db-up
+psql -h 127.0.0.1 -U postgres -c "CREATE USER portal WITH PASSWORD 'portal';"
+psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE portal OWNER portal;"
+```
+
+Esses comandos são exclusivamente para uma base local nova. Se o usuário ou o banco já existirem, não os recrie. Depois, carregue as variáveis como indicado em [Variáveis de ambiente](#variáveis-de-ambiente) e use uma das sequências abaixo.
+
+### Com Make
+
+```sh
 make migrate-up
 make seed-demo DEMO_SEED_ENABLED=true
 make api
@@ -265,11 +238,9 @@ make frontend-dev
 
 Esses alvos iniciam os processos de desenvolvimento fora dos containers. Para a composição completa, use `make compose-up`, `make compose-seed` e `make compose-down`.
 
-## Comandos equivalentes sem Make
+### Sem Make
 
 ```sh
-docker compose up -d postgres
-
 cd backend
 go run ./cmd/migrate up
 DEMO_SEED_ENABLED=true go run ./cmd/seed
@@ -284,7 +255,47 @@ npm ci
 npm run dev
 ```
 
-## Verificações
+## Banco, migrations e seed
+
+O comando `backend/cmd/migrate` suporta `up`, `status`, `down` e `version` usando Goose. As migrations versionadas criam `users`, `sessions` e `requests`, com chaves, constraints e índices. O schema completo está no [Dicionário de Dados](docs/DICIONARIO_DE_DADOS.md).
+
+```sh
+make migrate-up
+make migrate-status
+```
+
+`down` reverte a última migration, é bloqueado em produção e deve ser reservado a banco descartável ou rollback aprovado:
+
+```sh
+CONFIRM_DOWN=yes make migrate-down
+```
+
+### Dados de demonstração
+
+O seed é separado da API, transacional, repetível, bloqueado em produção e exige habilitação explícita:
+
+```sh
+make seed-demo DEMO_SEED_ENABLED=true
+```
+
+Credenciais **públicas e exclusivamente locais/de teste**:
+
+| Usuário | Senha demonstrativa |
+| --- | --- |
+| `colaborador1` | `DemoLocal-Colaborador1` |
+| `colaborador2` | `DemoLocal-Colaborador2` |
+
+As senhas são armazenadas como bcrypt. O seed cria cinco solicitações sintéticas que cobrem as cinco categorias, os três status, os dois autores e diferentes datas. Uma repetição não duplica seus registros nem altera silenciosamente a senha existente. O frontend também funciona com uma base sem solicitações.
+
+Reset deliberado das senhas demonstrativas:
+
+```sh
+make seed-reset-passwords DEMO_SEED_ENABLED=true CONFIRM_SEED_PASSWORD_RESET=yes
+```
+
+## Testes e CI
+
+### Verificações gerais
 
 ```sh
 make fmt
@@ -323,7 +334,7 @@ npx playwright install --with-deps chromium
 E2E_BASE_URL='http://127.0.0.1:8080' npm run test:e2e
 ```
 
-A suíte usa somente credenciais públicas de demonstração/teste, controla seus próprios registros e retém trace, screenshot e vídeo em caso de falha. A preparação completa automatizada é uma responsabilidade do job `e2e` da CI; detalhes e resultados locais estão em [docs/TESTES.md](docs/TESTES.md).
+A suíte usa somente credenciais públicas de demonstração/teste, controla seus próprios registros e retém trace, screenshot e vídeo em caso de falha. O job `e2e` da CI prepara banco, migrations, seed, API e frontend antes de executar o navegador.
 
 As evidências finais usam um roteiro separado e devem ser geradas somente contra ambiente demonstrativo controlado:
 
@@ -334,6 +345,16 @@ E2E_BASE_URL='http://127.0.0.1:8080' npm run evidence
 ### Integração contínua
 
 `.github/workflows/ci.yml` executa, em push para `main` e pull requests, jobs separados de backend, frontend, E2E com PostgreSQL real e build Docker. O workflow não publica imagens nem faz deploy: CD externo permanece melhoria futura. A configuração foi reproduzida localmente; a primeira execução no GitHub ainda precisa ocorrer após o arquivo ser versionado.
+
+Resultados confiáveis registrados durante o desenvolvimento:
+
+- backend: testes unitários/HTTP, integração PostgreSQL, detector de corrida, `go vet` e build aprovados;
+- frontend atual: 9 arquivos/54 testes, typecheck, lint e build aprovados;
+- Playwright: 3 fluxos E2E no Chromium aprovados antes da inclusão do tema noturno;
+- Compose: instalação limpa, migrations, seed repetível, fluxo funcional e persistência após reinício verificados;
+- OpenAPI considerado válido pelo Redocly, com avisos de estilo não bloqueantes.
+
+Esta reorganização documental não repetiu essas verificações. O seletor de tema possui teste de componente, mas não recebeu nova captura ou repetição E2E.
 
 ### Integração PostgreSQL
 
@@ -347,7 +368,7 @@ TEST_DATABASE_URL='postgres://portal_test:portal_test@127.0.0.1:55435/portal_tes
 make db-test-down
 ```
 
-Sem Make, execute o mesmo `docker compose -f compose.test.yaml -p bit-project-integration ...` e, dentro de `backend/`, `go test -count=1 ./internal/integration`. A estratégia e a matriz detalhada estão em [docs/TESTES.md](docs/TESTES.md).
+Sem Make, use `docker compose -f compose.test.yaml -p bit-project-integration` para controlar o banco e, dentro de `backend/`, execute `go test -count=1 ./internal/integration` com as mesmas variáveis de segurança.
 
 Probes da API:
 
@@ -360,62 +381,15 @@ curl -i http://127.0.0.1:8080/readyz
 - `/readyz` retorna `200` apenas com conexão válida ao banco e `503` quando o banco está indisponível.
 - Nenhum probe expõe URL, credencial ou outra configuração sensível.
 
-## Migrations e seed
+## API
 
-O comando `backend/cmd/migrate` suporta `up`, `status`, `down` e `version` usando Goose. As migrations criam `users`, `sessions` e `requests`, seus relacionamentos, constraints, índices e a identificação interna dos exemplos do seed.
+A API usa o prefixo `/api/v1`; somente `/healthz` e `/readyz` ficam na raiz e são públicos. Login cria uma sessão opaca no cookie `portal_session` (`HttpOnly`, `SameSite=Lax`, `Path=/`), enquanto o banco armazena apenas SHA-256 do token. A duração padrão é de oito horas, sem renovação deslizante. Login, logout e mutações exigem origem exata autorizada.
 
-```sh
-make migrate-up
-make migrate-status
-```
-
-`down` reverte somente a última migration, é bloqueado em `APP_ENV=production` e deve ser reservado a banco descartável ou rollback aprovado:
-
-```sh
-CONFIRM_DOWN=yes make migrate-down
-```
-
-### Dados de demonstração
-
-O seed é um comando separado da API, transacional, repetível e bloqueado em produção. Ele só executa com habilitação explícita:
-
-```sh
-# após copiar .env.example para .env e executar as migrations
-make seed-demo DEMO_SEED_ENABLED=true
-
-# equivalente sem Make, partindo da raiz e com o ambiente carregado
-cd backend
-DEMO_SEED_ENABLED=true go run ./cmd/seed
-```
-
-As credenciais abaixo são **públicas e exclusivamente locais/de teste**. Elas vêm de variáveis, portanto podem ser trocadas antes da primeira execução:
-
-| Usuário | Senha padrão do exemplo |
-| --- | --- |
-| `colaborador1` | `DemoLocal-Colaborador1` |
-| `colaborador2` | `DemoLocal-Colaborador2` |
-
-As senhas são persistidas como bcrypt, nunca em texto puro. Uma nova execução compara a senha configurada com o hash existente e não duplica usuários nem solicitações. Se um username já existir com outra senha, o comando falha e reverte toda a transação; ele não troca a senha silenciosamente. Quando o reset for realmente desejado:
-
-```sh
-make seed-reset-passwords DEMO_SEED_ENABLED=true CONFIRM_SEED_PASSWORD_RESET=yes
-```
-
-O seed cria cinco solicitações sintéticas, com as cinco categorias, os três status e datas anteriores ao momento da execução para demonstrar filtros de período:
-
-| Exemplo | Autor que pode editar/excluir enquanto estiver `aberto` |
-| --- | --- |
-| Notebook não inicializa | `colaborador1` |
-| Atualização de dados cadastrais | `colaborador2` |
-| Reposição de materiais de escritório | `colaborador1` |
-| Dúvida sobre reembolso de viagem | `colaborador2` |
-| Ajuste de iluminação da sala | `colaborador1` |
-
-Essas datas retroativas são uma capacidade exclusiva do seed. A criação normal pela API define `created_at` no backend e rejeita esse campo quando enviado pelo cliente. Registros alheios ao seed são preservados, e solicitações reais podem ter títulos repetidos. Uma base sem solicitações continua sendo um estado válido e o frontend não depende do seed. Os hashes são usados pelo login HTTP implementado.
+O detalhamento de endpoints, parâmetros, payloads, exemplos, filtros, paginação, permissões e erros está em [API.md](docs/API.md). A especificação legível por ferramentas permanece em [OpenAPI 3.0.3](docs/openapi.yaml).
 
 ## Deploy
 
-Para servidor, mantenha o Nginx/frontend como única origem pública, termine TLS em proxy reverso, use `APP_ENV=production`, `SESSION_COOKIE_SECURE=true`, origem HTTPS exata, PostgreSQL em rede privada e segredos fornecidos pelo ambiente. Migrations devem rodar como tarefa anterior à API; nunca automatize `down` em produção. Backup, restauração, observabilidade e rotação de segredos pertencem à infraestrutura escolhida. O procedimento completo e as limitações estão em [docs/DEPLOY.md](docs/DEPLOY.md).
+Para servidor, mantenha o Nginx/frontend como única origem pública, termine TLS em proxy reverso, use `APP_ENV=production`, `SESSION_COOKIE_SECURE=true`, origem HTTPS exata, PostgreSQL em rede privada e segredos fornecidos pelo ambiente. Migrations devem rodar como tarefa anterior à API; nunca automatize `down` em produção. Preserve o banco/volume entre recriações e estabeleça backup, restauração, observabilidade e rotação de segredos na infraestrutura escolhida.
 
 O repositório não implementa publicação automática, TLS, backup ou infraestrutura cloud. O Compose é uma execução reproduzível local e uma base para servidor único, não uma declaração de prontidão para produção. O workflow implementa CI; CD e deploy externo permanecem melhorias futuras.
 
@@ -431,23 +405,20 @@ O repositório não implementa publicação automática, TLS, backup ou infraest
 - **`npm ci` falha em volume Windows/WSL**: remova somente o `frontend/node_modules` local e repita em filesystem Linux ou pelo build Docker. Não remova `package-lock.json`.
 - **Migration `down` recusada**: ela é bloqueada em produção e o Make exige `CONFIRM_DOWN=yes`; use somente em banco descartável ou rollback aprovado.
 
-## Documentação e evidências
+## Evidências
+
+As nove capturas em [docs/evidencias](docs/evidencias/README.md) foram geradas em Chromium contra frontend, API e PostgreSQL reais. Elas cobrem login sem credencial exposta, dashboard, listagem, filtros, criação, detalhe, estados Em Atendimento/Concluído e viewport móvel.
+
+As imagens antecedem a marca `b1t` e o tema noturno. Continuam válidas como evidência dos fluxos, mas não representam a identidade visual mais recente nem comprovam o modo escuro.
+
+### Documentação principal
 
 - [Memorial Técnico](docs/MEMORIAL_TECNICO_DE_DESENVOLVIMENTO.md)
-- [Requisitos e rastreabilidade](docs/REQUISITOS.md)
-- [Decisões arquiteturais](docs/DECISOES.md)
-- [Contrato da API](docs/API.md) e [OpenAPI](docs/openapi.yaml)
 - [Dicionário de dados](docs/DICIONARIO_DE_DADOS.md)
-- [Estratégia e resultados de testes](docs/TESTES.md)
-- [Execução e deploy](docs/DEPLOY.md)
-- [Checklist final](docs/CHECKLIST_ENTREGA.md)
-- [Evidências reais](docs/evidencias/README.md)
+- [Contrato narrativo da API](docs/API.md)
+- [Especificação OpenAPI](docs/openapi.yaml)
 
-O workflow em `.github/workflows/ci.yml` implementa integração contínua. Não há publicação automática ou CD, e nenhum deploy externo foi alegado.
-
-As nove capturas existentes em `docs/evidencias/` foram registradas anteriormente em Chromium contra frontend, API e PostgreSQL reais. Elas cobrem login sem exposição de credencial, dashboard, listagem, filtros, criação, detalhe, estados Em Atendimento/Concluído e viewport móvel. Esta revisão documental apenas reutiliza esses registros; não executou nem regenerou evidências.
-
-## Limitações conhecidas e melhorias futuras
+## Limitações e melhorias futuras
 
 - O limitador de login vive em memória, perde contadores no reinício e não coordena múltiplas instâncias.
 - Não há auditoria de alterações, histórico de status, exclusão lógica, papéis, gestão de usuários ou recuperação de senha.

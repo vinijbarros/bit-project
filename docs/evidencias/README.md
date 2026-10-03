@@ -1,5 +1,7 @@
 # Evidências da aplicação
 
+> Observação: estas capturas foram geradas antes da alteração posterior da marca visual para `b1t` e da inclusão do modo noturno. Elas permanecem como evidência real dos fluxos funcionais executados, mas não representam a identidade visual mais recente nem comprovam o tema escuro. Uma nova rodada será necessária caso a entrega exija capturas atualizadas dessas mudanças.
+
 Este diretório contém capturas reais geradas no Chromium por `npm run evidence`, contra a aplicação completa em execução. O cenário usa PostgreSQL, migrations, seed, API Go e frontend Nginx reais; não são mockups nem telas alimentadas por arrays estáticos.
 
 O roteiro automatizado está em `frontend/evidence/capture.spec.ts`. Ele abre a tela de login vazia antes de preencher as credenciais em memória, portanto senha, cookie e token de sessão não aparecem nas imagens. As credenciais usadas são exclusivamente as públicas de demonstração.

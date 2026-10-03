@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { AlertMessage } from '../components/feedback/AlertMessage'
 import { FormField } from '../components/forms/FormField'
+import { ThemeToggle } from '../components/theme/ThemeToggle'
 import { useAuth } from '../features/auth/AuthContext'
 import { safeInternalDestination } from '../app/routes/destination'
 
@@ -58,8 +59,11 @@ export function LoginPage() {
 
   return (
     <main className="public-shell">
+      <div className="public-theme-action">
+        <ThemeToggle />
+      </div>
       <section className="auth-card" aria-labelledby="login-title">
-        <span className="brand-mark brand-mark--large" aria-hidden="true">bit</span>
+        <span className="brand-mark brand-mark--large" aria-hidden="true">b1t</span>
         <span className="eyebrow">Portal de Solicitações Internas</span>
         <h1 id="login-title">Acesso ao portal</h1>
         <p>Entre com as credenciais fornecidas para o ambiente.</p>

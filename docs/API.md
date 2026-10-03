@@ -1,24 +1,34 @@
 # Contrato da API
 
-O contrato normativo está em `docs/openapi.yaml` (OpenAPI 3.0.3). Este documento resume convenções, segurança e o estado real de implementação. Qualquer mudança em um endpoint deve atualizar os dois arquivos e a rastreabilidade.
+O contrato legível por ferramentas está em [openapi.yaml](openapi.yaml), no formato OpenAPI 3.0.3. Este documento explica o uso da API efetivamente implementada. Qualquer mudança de endpoint deve manter os dois arquivos coerentes.
 
-## Estado executável
+## URL base
 
-| Operação | Estado atual |
-| --- | --- |
-| `GET /healthz` | Implementada e pública. |
-| `GET /readyz` | Implementada e pública; consulta o banco. |
-| `POST /api/v1/auth/login` | Implementada; exige origem confiável. |
-| `POST /api/v1/auth/logout` | Implementada e idempotente; exige origem confiável. |
-| `GET /api/v1/auth/me` | Implementada e protegida por sessão. |
-| `GET /api/v1/requests` | Implementada e protegida; lista e combina filtros. |
-| `POST /api/v1/requests` | Implementada e protegida; exige origem confiável. |
-| `GET /api/v1/requests/{id}` | Implementada e protegida. |
-| `PATCH /api/v1/requests/{id}` | Implementada para autor e estado aberto; exige origem confiável. |
-| `DELETE /api/v1/requests/{id}` | Implementada para autor e estado aberto; exige origem confiável. |
-| `PATCH /api/v1/requests/{id}/status` | Implementada para qualquer usuário autenticado; exige origem confiável. |
-| `GET /api/v1/dashboard` | Implementada e protegida; retorna indicadores globais. |
-| `GET /api/v1/metadata` | Implementada e protegida; retorna categorias/status e rótulos estáveis. |
+- Prefixo das rotas de aplicação: `/api/v1`.
+- Desenvolvimento pelo Vite: `http://127.0.0.1:5173/api/v1`.
+- API direta sem Docker: `http://127.0.0.1:8080/api/v1`.
+- Compose/Nginx: `http://127.0.0.1:8080/api/v1`.
+- Probes públicos: `/healthz` e `/readyz`, fora do prefixo.
+
+O navegador usa caminhos relativos. Em desenvolvimento, Vite encaminha `/api`; no Compose, Nginx faz esse proxy. Assim, o cookie permanece same-origin e o fluxo normal não depende de CORS.
+
+## Endpoints
+
+| Método e rota | Sessão | `Origin` | Finalidade |
+| --- | --- | --- | --- |
+| `GET /healthz` | Não | Não | Confirma que o processo HTTP está vivo. |
+| `GET /readyz` | Não | Não | Confirma conectividade com PostgreSQL; retorna `503` quando indisponível. |
+| `POST /api/v1/auth/login` | Não | Sim | Valida usuário/senha, cria sessão e cookie. |
+| `POST /api/v1/auth/logout` | Opcional | Sim | Revoga a sessão e expira o cookie; repetição sem cookie retorna `204`. |
+| `GET /api/v1/auth/me` | Sim | Não | Retorna a identidade segura do usuário atual. |
+| `GET /api/v1/metadata` | Sim | Não | Retorna categorias e status com rótulos. |
+| `GET /api/v1/requests` | Sim | Não | Lista solicitações com filtros e paginação. |
+| `POST /api/v1/requests` | Sim | Sim | Cria solicitação para o usuário da sessão. |
+| `GET /api/v1/requests/{id}` | Sim | Não | Consulta detalhes e permissões calculadas. |
+| `PATCH /api/v1/requests/{id}` | Sim | Sim | Edita título, descrição e/ou categoria. |
+| `DELETE /api/v1/requests/{id}` | Sim | Sim | Exclui fisicamente a solicitação autorizada. |
+| `PATCH /api/v1/requests/{id}/status` | Sim | Sim | Altera ou reabre o status. |
+| `GET /api/v1/dashboard` | Sim | Não | Retorna os quatro indicadores globais. |
 
 ## Convenções
 
@@ -73,6 +83,28 @@ Todas as operações de domínio, inclusive `metadata` e `dashboard`, exigem o c
 
 O guard de origem está conectado a login/logout e a todas as operações mutáveis existentes de solicitações.
 
+### Login e identidade
+
+Payload de login:
+
+```json
+{"username":"colaborador1","password":"DemoLocal-Colaborador1"}
+```
+
+Resposta de login e de `GET /auth/me`:
+
+```json
+{
+  "data": {
+    "id": 1,
+    "username": "colaborador1",
+    "display_name": "Colaborador 1"
+  }
+}
+```
+
+A senha aceita no máximo 72 bytes, limite do bcrypt. A resposta nunca contém senha, hash ou token. Login inválido retorna `401 invalid_credentials` com mensagem genérica.
+
 ## Criação, detalhe, edição e exclusão
 
 `POST /api/v1/requests` aceita exclusivamente `title`, `description` e `category`. O servidor remove espaços externos, conta limites por pontos de código Unicode e exige título de 3–150 caracteres e descrição de 10–5000. A categoria deve ser `ti`, `rh`, `compras`, `financeiro` ou `infraestrutura`. Autor vem da sessão, status é explicitamente `aberto` e datas são definidas no servidor/banco; qualquer campo adicional é rejeitado. O sucesso retorna `201`, `Location: /api/v1/requests/{id}` e o recurso criado.
@@ -84,6 +116,47 @@ O guard de origem está conectado a login/logout e a todas as operações mutáv
 `DELETE /api/v1/requests/{id}` segue a mesma regra de autoria/estado e retorna `204` sem corpo. A exclusão é física. Tanto atualização quanto exclusão usam SQL condicional por ID, autor e estado, de modo que uma mudança concorrente de status não abre uma janela para mutação indevida. O diagnóstico posterior diferencia `404`, `403` e `409` sem desfazer essa garantia.
 
 Não há controle de versão otimista nesta versão: duas edições concorrentes válidas do mesmo autor sobre uma solicitação ainda aberta seguem a política de última gravação vence. Essa limitação não afeta a atomicidade da regra de autoria/status.
+
+Payload de criação:
+
+```json
+{
+  "title": "Acesso ao sistema",
+  "description": "Solicito acesso ao ambiente interno.",
+  "category": "ti"
+}
+```
+
+Resposta de criação, detalhe, edição ou mudança de status:
+
+```json
+{
+  "data": {
+    "id": 1,
+    "code": "SOL-000001",
+    "title": "Acesso ao sistema",
+    "description": "Solicito acesso ao ambiente interno.",
+    "category": {"value":"ti","label":"TI"},
+    "status": {"value":"aberto","label":"Aberto"},
+    "requester": {"id":1,"username":"colaborador1","display_name":"Colaborador 1"},
+    "created_at": "2026-10-03T12:00:00Z",
+    "updated_at": "2026-10-03T12:00:00Z",
+    "permissions": {"can_edit":true,"can_delete":true}
+  }
+}
+```
+
+Exemplos de edição parcial válidos:
+
+```json
+{"title":"Novo título"}
+```
+
+```json
+{"description":"Descrição atualizada.","category":"infraestrutura"}
+```
+
+`DELETE` bem-sucedido retorna `204` sem corpo.
 
 ## Alteração de status
 

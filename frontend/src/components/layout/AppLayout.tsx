@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 import { useAuth } from '../../features/auth/AuthContext'
 import { AlertMessage } from '../feedback/AlertMessage'
+import { ThemeToggle } from '../theme/ThemeToggle'
 
 const navigation = [
   { to: '/dashboard', label: 'Dashboard' },
@@ -42,13 +43,14 @@ export function AppLayout() {
       <a className="skip-link" href="#conteudo-principal">Pular para o conteúdo principal</a>
       <header className="app-header">
         <div className="brand-block">
-          <span className="brand-mark" aria-hidden="true">bit</span>
+          <span className="brand-mark" aria-hidden="true">b1t</span>
           <div>
             <strong>Portal Interno</strong>
             <span>Solicitações</span>
           </div>
         </div>
         <div className="user-actions">
+          <ThemeToggle />
           <span className="user-name">{user?.display_name}</span>
           <button className="button button--quiet" type="button" onClick={handleLogout} disabled={loggingOut}>
             {loggingOut ? 'Saindo…' : 'Sair'}

@@ -13,6 +13,7 @@ import { safeInternalDestination } from '../../app/routes/destination'
 import { LoginPage } from '../../pages/LoginPage'
 import type { User } from '../../types/api'
 import { AuthProvider } from './AuthContext'
+import { ThemeProvider } from '../theme/ThemeContext'
 
 const authMocks = vi.hoisted(() => ({
   currentUser: vi.fn(),
@@ -77,7 +78,11 @@ function renderAuthApp(initialEntry: string) {
       ],
     },
   ], { initialEntries: [initialEntry] })
-  render(<AuthProvider><RouterProvider router={router} /></AuthProvider>)
+  render(
+    <ThemeProvider>
+      <AuthProvider><RouterProvider router={router} /></AuthProvider>
+    </ThemeProvider>,
+  )
   return router
 }
 

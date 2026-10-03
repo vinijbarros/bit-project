@@ -2,7 +2,7 @@ import type { FormEvent } from 'react'
 
 import { FormField } from '../../components/forms/FormField'
 import type { Category, MetadataOption } from '../../types/api'
-import { unicodeLength, type RequestFormErrors, type RequestFormField, type RequestFormValues } from './requestForm'
+import { unicodeLength, type RequestFormErrors, type RequestFormField, type RequestFormValues } from './requestFormValidation'
 
 interface RequestFormProps {
   values: RequestFormValues
