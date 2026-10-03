@@ -1,0 +1,203 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_DB: portal_test
+          POSTGRES_USER: portal_test
+          POSTGRES_PASSWORD: portal_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U portal_test -d portal_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgres://portal_test:portal_test@127.0.0.1:5432/portal_test?sslmode=disable
+      TEST_DATABASE_URL: postgres://portal_test:portal_test@127.0.0.1:5432/portal_test?sslmode=disable
+      TEST_DATABASE_ALLOW_RESET: "yes"
+      MIGRATIONS_DIR: db/migrations
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.22.2
+          cache-dependency-path: backend/go.sum
+      - name: Baixar dependências
+        working-directory: backend
+        run: go mod download
+      - name: Formatação
+        working-directory: backend
+        run: test -z "$(gofmt -l .)"
+      - name: Vet
+        working-directory: backend
+        run: go vet ./...
+      - name: Testes unitários e HTTP
+        working-directory: backend
+        run: go test -count=1 $(go list ./... | grep -v '/internal/integration$')
+      - name: Migrations reais
+        working-directory: backend
+        run: go run ./cmd/migrate up
+      - name: Integração PostgreSQL
+        working-directory: backend
+        run: go test -count=1 ./internal/integration
+      - name: Detector de corrida
+        working-directory: backend
+        run: go test -race ./internal/service ./internal/http
+      - name: Build dos comandos
+        working-directory: backend
+        run: go build ./...
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.14.0
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Validar contrato OpenAPI
+        run: npx --yes @redocly/cli@2.57.0 lint docs/openapi.yaml
+      - name: Instalar pelo lockfile
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Tipos
+        working-directory: frontend
+        run: npm run typecheck
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+      - name: Testes de componentes
+        working-directory: frontend
+        run: npm run test
+      - name: Build Vite
+        working-directory: frontend
+        run: npm run build
+
+  e2e:
+    name: E2E real
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_DB: portal_e2e
+          POSTGRES_USER: portal_e2e
+          POSTGRES_PASSWORD: portal_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U portal_e2e -d portal_e2e"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      APP_ENV: test
+      HTTP_ADDR: 127.0.0.1:8080
+      DATABASE_URL: postgres://portal_e2e:portal_e2e@127.0.0.1:5432/portal_e2e?sslmode=disable
+      MIGRATIONS_DIR: db/migrations
+      TRUSTED_ORIGINS: http://127.0.0.1:5173
+      SESSION_COOKIE_SECURE: "false"
+      DEMO_SEED_ENABLED: "true"
+      DEMO_USER1_USERNAME: colaborador1
+      DEMO_USER1_DISPLAY_NAME: Colaborador 1
+      DEMO_USER1_PASSWORD: DemoLocal-Colaborador1
+      DEMO_USER2_USERNAME: colaborador2
+      DEMO_USER2_DISPLAY_NAME: Colaborador 2
+      DEMO_USER2_PASSWORD: DemoLocal-Colaborador2
+      E2E_BASE_URL: http://127.0.0.1:5173
+      E2E_USER1_USERNAME: colaborador1
+      E2E_USER1_PASSWORD: DemoLocal-Colaborador1
+      E2E_USER2_USERNAME: colaborador2
+      E2E_USER2_PASSWORD: DemoLocal-Colaborador2
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.22.2
+          cache-dependency-path: backend/go.sum
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.14.0
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar frontend e Chromium
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Preparar banco determinístico
+        working-directory: backend
+        run: |
+          go run ./cmd/migrate up
+          go run ./cmd/seed
+          go build -o "$RUNNER_TEMP/portal-api" ./cmd/api
+      - name: Iniciar API e Vite
+        run: |
+          "$RUNNER_TEMP/portal-api" >"$RUNNER_TEMP/api.log" 2>&1 &
+          echo $! >"$RUNNER_TEMP/api.pid"
+          (cd frontend && exec ./node_modules/.bin/vite --host 127.0.0.1) >"$RUNNER_TEMP/vite.log" 2>&1 &
+          echo $! >"$RUNNER_TEMP/vite.pid"
+      - name: Aguardar readiness
+        run: |
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:8080/readyz >/dev/null \
+              && curl --fail --silent http://127.0.0.1:5173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/api.log" "$RUNNER_TEMP/vite.log"
+          exit 1
+      - name: Playwright
+        working-directory: frontend
+        run: npm run test:e2e
+      - name: Artefatos de falha
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-failure
+          if-no-files-found: ignore
+          path: |
+            frontend/test-results
+            frontend/playwright-report
+            ${{ runner.temp }}/api.log
+            ${{ runner.temp }}/vite.log
+      - name: Encerrar processos
+        if: always()
+        run: |
+          test ! -f "$RUNNER_TEMP/vite.pid" || kill "$(cat "$RUNNER_TEMP/vite.pid")" 2>/dev/null || true
+          test ! -f "$RUNNER_TEMP/api.pid" || kill "$(cat "$RUNNER_TEMP/api.pid")" 2>/dev/null || true
+
+  docker:
+    name: Imagens Docker
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validar Compose
+        run: docker compose --env-file .env.example config --quiet
+      - name: Construir imagens
+        run: docker compose --env-file .env.example build
