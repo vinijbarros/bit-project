@@ -13,6 +13,7 @@ import { safeInternalDestination } from '../../app/routes/destination'
 import { LoginPage } from '../../pages/LoginPage'
 import type { User } from '../../types/api'
 import { AuthProvider } from './AuthContext'
+import { ThemeProvider } from '../theme/ThemeContext'
 
 const authMocks = vi.hoisted(() => ({
   currentUser: vi.fn(),
@@ -77,7 +78,11 @@ function renderAuthApp(initialEntry: string) {
       ],
     },
   ], { initialEntries: [initialEntry] })
-  render(<AuthProvider><RouterProvider router={router} /></AuthProvider>)
+  render(
+    <ThemeProvider>
+      <AuthProvider><RouterProvider router={router} /></AuthProvider>
+    </ThemeProvider>,
+  )
   return router
 }
 
@@ -186,6 +191,16 @@ describe('fluxo de autenticação', () => {
     act(() => authMocks.unauthorizedHandler?.())
     expect(await screen.findByText('Sua sessão expirou. Entre novamente para continuar.')).toBeTruthy()
     expect(screen.queryByText('Detalhe protegido')).toBeNull()
+  })
+
+  it('identifica a seção atual também nas rotas de detalhe', async () => {
+    authMocks.currentUser.mockResolvedValue(user)
+    renderAuthApp('/solicitacoes/7')
+
+    await screen.findByText('Detalhe protegido')
+    expect(screen.getByRole('link', { name: 'Solicitações' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('link', { name: 'Dashboard' }).getAttribute('aria-current')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Pular para o conteúdo principal' }).getAttribute('href')).toBe('#conteudo-principal')
   })
 
   it('exibe indisponibilidade de /me e permite repetir sem fingir logout', async () => {

@@ -1,0 +1,820 @@
+openapi: 3.0.3
+info:
+  title: Portal de Solicitações Internas API
+  version: 1.0.0
+  description: >-
+    Contrato final da API implementada: probes, autenticação, metadados, solicitações e dashboard.
+servers:
+  - url: http://127.0.0.1:8080
+    description: API direta sem Docker ou origem pública do Nginx no Compose
+  - url: http://127.0.0.1:5173
+    description: Desenvolvimento pelo proxy do Vite
+tags:
+  - name: Probes
+    description: Saúde do processo e prontidão do PostgreSQL.
+  - name: Autenticação
+    description: Login, identidade da sessão e logout.
+  - name: Metadados
+    description: Valores e rótulos aceitos para categorias e status.
+  - name: Solicitações
+    description: Criação, consulta, filtros, edição, exclusão e mudança de status.
+  - name: Dashboard
+    description: Indicadores globais das solicitações persistidas.
+security:
+  - sessionCookie: []
+paths:
+  /healthz:
+    get:
+      tags: [Probes]
+      summary: Verifica se o processo HTTP está vivo
+      operationId: health
+      security: []
+      x-implementation-status: implemented
+      responses:
+        "200":
+          description: Processo vivo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbeResponse"
+              example:
+                status: ok
+  /readyz:
+    get:
+      tags: [Probes]
+      summary: Verifica a conectividade com o PostgreSQL
+      operationId: readiness
+      security: []
+      x-implementation-status: implemented
+      responses:
+        "200":
+          description: Banco acessível
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbeResponse"
+              example:
+                status: ready
+        "503":
+          $ref: "#/components/responses/DatabaseUnavailable"
+  /api/v1/auth/login:
+    post:
+      tags: [Autenticação]
+      summary: Inicia uma sessão
+      operationId: login
+      security: []
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+            example:
+              username: colaborador1
+              password: DemoLocal-Colaborador1
+      responses:
+        "200":
+          description: Sessão criada
+          headers:
+            Set-Cookie:
+              description: Cookie opaco portal_session; HttpOnly, SameSite=Lax e Path=/.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/InvalidCredentials"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/auth/logout:
+    post:
+      tags: [Autenticação]
+      summary: Revoga a sessão atual
+      operationId: logout
+      x-implementation-status: implemented
+      security:
+        - sessionCookie: []
+        - {}
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      responses:
+        "204":
+          description: Sessão revogada e cookie expirado
+          headers:
+            Set-Cookie:
+              description: Cookie portal_session expirado.
+              schema:
+                type: string
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/auth/me:
+    get:
+      tags: [Autenticação]
+      summary: Retorna o usuário autenticado
+      operationId: currentUser
+      x-implementation-status: implemented
+      responses:
+        "200":
+          description: Usuário da sessão
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/metadata:
+    get:
+      tags: [Metadados]
+      summary: Lista categorias e status com rótulos
+      operationId: metadata
+      x-implementation-status: implemented
+      responses:
+        "200":
+          description: Valores aceitos pela API
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetadataResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/requests:
+    get:
+      tags: [Solicitações]
+      summary: Lista e filtra solicitações
+      operationId: listRequests
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/FromDate"
+        - $ref: "#/components/parameters/ToDate"
+        - $ref: "#/components/parameters/CategoryFilter"
+        - $ref: "#/components/parameters/StatusFilter"
+        - $ref: "#/components/parameters/TitleQuery"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Página de solicitações ordenada por abertura mais recente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Solicitações]
+      summary: Cria uma solicitação aberta para o usuário da sessão
+      operationId: createRequest
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRequestInput"
+      responses:
+        "201":
+          description: Solicitação criada
+          headers:
+            Location:
+              description: Caminho do recurso criado.
+              schema:
+                type: string
+                example: /api/v1/requests/1
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/requests/{id}:
+    parameters:
+      - $ref: "#/components/parameters/RequestID"
+    get:
+      tags: [Solicitações]
+      summary: Consulta uma solicitação
+      operationId: getRequest
+      x-implementation-status: implemented
+      responses:
+        "200":
+          description: Detalhes da solicitação
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    patch:
+      tags: [Solicitações]
+      summary: Edita campos de uma solicitação aberta do próprio autor
+      operationId: updateRequest
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRequestInput"
+      responses:
+        "200":
+          description: Solicitação atualizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Solicitações]
+      summary: Exclui fisicamente uma solicitação aberta do próprio autor
+      operationId: deleteRequest
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      responses:
+        "204":
+          description: Solicitação excluída
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/requests/{id}/status:
+    parameters:
+      - $ref: "#/components/parameters/RequestID"
+    patch:
+      tags: [Solicitações]
+      summary: Altera livremente o status, inclusive para reabrir
+      description: Qualquer usuário autenticado pode realizar qualquer transição. Repetir o status atual é idempotente e preserva updated_at.
+      operationId: updateRequestStatus
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/Origin"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStatusInput"
+      responses:
+        "200":
+          description: Representação atual após mudança efetiva ou repetição idempotente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/dashboard:
+    get:
+      tags: [Dashboard]
+      summary: Retorna contagens globais
+      operationId: dashboard
+      description: Contagens globais atuais, sem filtros e sem restrição por solicitante.
+      x-implementation-status: implemented
+      responses:
+        "200":
+          description: Totais de todas as solicitações
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardResponse"
+              examples:
+                empty:
+                  summary: Base sem solicitações
+                  value:
+                    data: {total: 0, abertas: 0, em_atendimento: 0, concluidas: 0}
+                populated:
+                  summary: Base populada
+                  value:
+                    data: {total: 8, abertas: 3, em_atendimento: 2, concluidas: 3}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: portal_session
+      description: Token opaco; o banco armazena apenas seu hash SHA-256.
+  parameters:
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      description: Origem exata permitida para proteção CSRF.
+      schema:
+        type: string
+        example: http://127.0.0.1:5173
+    RequestID:
+      name: id
+      in: path
+      required: true
+      description: ID numérico positivo da solicitação.
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    FromDate:
+      name: date_from
+      in: query
+      description: Primeiro dia local incluído, em America/Sao_Paulo. Vazio equivale a ausente.
+      schema:
+        type: string
+        format: date
+    ToDate:
+      name: date_to
+      in: query
+      description: Último dia local incluído, em America/Sao_Paulo; o limite SQL é o início exclusivo do dia seguinte. Vazio equivale a ausente.
+      schema:
+        type: string
+        format: date
+    CategoryFilter:
+      name: category
+      in: query
+      description: Vazio equivale a ausente.
+      schema:
+        $ref: "#/components/schemas/Category"
+    StatusFilter:
+      name: status
+      in: query
+      description: Vazio equivale a ausente.
+      schema:
+        $ref: "#/components/schemas/RequestStatus"
+    TitleQuery:
+      name: q
+      in: query
+      description: Substring somente do título, após trim e sem distinguir maiúsculas/minúsculas. %, _ e barra invertida são literais; vazio equivale a ausente.
+      schema:
+        type: string
+        maxLength: 150
+    Page:
+      name: page
+      in: query
+      description: Página positiva; ausente ou vazia usa 1.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: page_size
+      in: query
+      description: Itens por página; ausente ou vazio usa 20, máximo 100.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+  schemas:
+    Category:
+      type: string
+      enum: [ti, rh, compras, financeiro, infraestrutura]
+    RequestStatus:
+      type: string
+      enum: [aberto, em_atendimento, concluido]
+    ProbeResponse:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+    LoginInput:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+        password:
+          type: string
+          format: password
+          minLength: 1
+          maxLength: 72
+          description: O limite efetivo é de 72 bytes, não caracteres.
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, username, display_name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        username:
+          type: string
+        display_name:
+          type: string
+    AuthResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/User"
+    MetadataOption:
+      type: object
+      additionalProperties: false
+      required: [value, label]
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+    MetadataResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [categories, statuses]
+          properties:
+            categories:
+              type: array
+              minItems: 5
+              maxItems: 5
+              items:
+                $ref: "#/components/schemas/MetadataOption"
+            statuses:
+              type: array
+              minItems: 3
+              maxItems: 3
+              items:
+                $ref: "#/components/schemas/MetadataOption"
+    CreateRequestInput:
+      type: object
+      additionalProperties: false
+      description: Espaços externos são removidos e limites são contados por pontos de código Unicode. Autor, status e datas são definidos pelo servidor.
+      required: [title, description, category]
+      properties:
+        title:
+          type: string
+          minLength: 3
+          maxLength: 150
+        description:
+          type: string
+          minLength: 10
+          maxLength: 5000
+        category:
+          $ref: "#/components/schemas/Category"
+    UpdateRequestInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: Campo ausente é preservado; null, vazio após trim, valor inalterado ou campo adicional é rejeitado.
+      properties:
+        title:
+          type: string
+          minLength: 3
+          maxLength: 150
+        description:
+          type: string
+          minLength: 10
+          maxLength: 5000
+        category:
+          $ref: "#/components/schemas/Category"
+    UpdateStatusInput:
+      type: object
+      additionalProperties: false
+      description: Aceita exatamente um dos três valores internos; null e campo ausente são inválidos.
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/RequestStatus"
+    Requester:
+      type: object
+      additionalProperties: false
+      required: [id, username, display_name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        username:
+          type: string
+        display_name:
+          type: string
+    LabeledValue:
+      type: object
+      additionalProperties: false
+      required: [value, label]
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+    RequestPermissions:
+      type: object
+      additionalProperties: false
+      required: [can_edit, can_delete]
+      properties:
+        can_edit:
+          type: boolean
+        can_delete:
+          type: boolean
+    Request:
+      type: object
+      additionalProperties: false
+      required: [id, code, title, description, category, status, requester, created_at, updated_at, permissions]
+      properties:
+        id:
+          type: integer
+          format: int64
+        code:
+          type: string
+          pattern: '^SOL-[0-9]{6,}$'
+          example: SOL-000001
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          allOf:
+            - $ref: "#/components/schemas/LabeledValue"
+          example:
+            value: ti
+            label: TI
+        status:
+          allOf:
+            - $ref: "#/components/schemas/LabeledValue"
+          example:
+            value: aberto
+            label: Aberto
+        requester:
+          $ref: "#/components/schemas/Requester"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        permissions:
+          $ref: "#/components/schemas/RequestPermissions"
+    RequestResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Request"
+    Pagination:
+      type: object
+      additionalProperties: false
+      required: [page, page_size, total_items, total_pages]
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_items:
+          type: integer
+          format: int64
+        total_pages:
+          type: integer
+    RequestListResponse:
+      type: object
+      additionalProperties: false
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RequestListItem"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+    RequestListItem:
+      type: object
+      additionalProperties: false
+      required: [id, code, title, category, requester, created_at, status]
+      properties:
+        id:
+          type: integer
+          format: int64
+        code:
+          type: string
+          pattern: '^SOL-[0-9]{6,}$'
+          example: SOL-000001
+        title:
+          type: string
+        category:
+          $ref: "#/components/schemas/LabeledValue"
+        requester:
+          $ref: "#/components/schemas/Requester"
+        created_at:
+          type: string
+          format: date-time
+        status:
+          $ref: "#/components/schemas/LabeledValue"
+    DashboardResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [total, abertas, em_atendimento, concluidas]
+          properties:
+            total:
+              type: integer
+              format: int64
+              minimum: 0
+            abertas:
+              type: integer
+              format: int64
+              minimum: 0
+            em_atendimento:
+              type: integer
+              format: int64
+              minimum: 0
+            concluidas:
+              type: integer
+              format: int64
+              minimum: 0
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        fields:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorDetail"
+        request_id:
+          type: string
+  responses:
+    BadRequest:
+      description: JSON, parâmetros ou campos inválidos
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: validation_failed
+              message: Corrija os campos informados.
+              fields:
+                title: [Informe entre 3 e 150 caracteres.]
+            request_id: request-example
+    InvalidCredentials:
+      description: Credenciais inválidas
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: invalid_credentials
+              message: Usuário ou senha inválidos.
+    Unauthorized:
+      description: Sessão ausente, inválida ou expirada
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: authentication_required
+              message: Autenticação necessária.
+    Forbidden:
+      description: Permissão insuficiente ou origem não permitida
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Recurso inexistente
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Conflito com o estado ou regra atual
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    UnsupportedMediaType:
+      description: Content-Type incompatível
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: Erro interno sem detalhes sensíveis
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    TooManyRequests:
+      description: Limite temporário de tentativas de login atingido
+      headers:
+        Retry-After:
+          description: Segundos restantes da janela atual.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: login_rate_limited
+              message: Muitas tentativas de login. Tente novamente mais tarde.
+    DatabaseUnavailable:
+      description: Banco indisponível para readiness
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: database_unavailable
+              message: Banco de dados indisponível.

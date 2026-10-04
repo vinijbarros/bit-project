@@ -4,9 +4,9 @@
 !.env.example
 !**/.env.example
 
-# Internal project documentation (kept locally for now)
+# Internal agent instructions stay local. Delivery documentation is versioned.
 AGENTS.md
-docs/
+docs/referencia/*.pdf
 
 # Go build and coverage artifacts
 .cache/
@@ -19,6 +19,12 @@ frontend/node_modules/
 frontend/dist/
 frontend/coverage/
 frontend/*.tsbuildinfo
+frontend/playwright-report/
+frontend/test-results/
+frontend/blob-report/
+
+# Local delivery packages
+artifacts/
 
 # Database data and local volumes
 .data/

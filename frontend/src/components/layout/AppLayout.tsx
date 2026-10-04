@@ -1,18 +1,27 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 import { useAuth } from '../../features/auth/AuthContext'
 import { AlertMessage } from '../feedback/AlertMessage'
+import { ThemeToggle } from '../theme/ThemeToggle'
 
 const navigation = [
-  { to: '/dashboard', label: 'Dashboard', end: true },
-  { to: '/solicitacoes', label: 'Solicitações', end: true },
-  { to: '/solicitacoes/nova', label: 'Nova solicitação', end: true },
+  { to: '/dashboard', label: 'Dashboard' },
+  { to: '/solicitacoes', label: 'Solicitações' },
+  { to: '/solicitacoes/nova', label: 'Nova solicitação' },
 ]
+
+function isCurrentPage(pathname: string, destination: string): boolean {
+  if (destination === '/solicitacoes') {
+    return pathname === destination || (pathname.startsWith('/solicitacoes/') && pathname !== '/solicitacoes/nova')
+  }
+  return pathname === destination
+}
 
 export function AppLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [loggingOut, setLoggingOut] = useState(false)
   const [logoutError, setLogoutError] = useState<string | null>(null)
 
@@ -31,15 +40,17 @@ export function AppLayout() {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#conteudo-principal">Pular para o conteúdo principal</a>
       <header className="app-header">
         <div className="brand-block">
-          <span className="brand-mark" aria-hidden="true">bit</span>
+          <span className="brand-mark" aria-hidden="true">b1t</span>
           <div>
             <strong>Portal Interno</strong>
             <span>Solicitações</span>
           </div>
         </div>
         <div className="user-actions">
+          <ThemeToggle />
           <span className="user-name">{user?.display_name}</span>
           <button className="button button--quiet" type="button" onClick={handleLogout} disabled={loggingOut}>
             {loggingOut ? 'Saindo…' : 'Sair'}
@@ -49,11 +60,14 @@ export function AppLayout() {
 
       <div className="app-body">
         <nav className="main-navigation" aria-label="Navegação principal">
-          {navigation.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => `nav-link${isActive ? ' nav-link--active' : ''}`}>
-              {item.label}
-            </NavLink>
-          ))}
+          {navigation.map((item) => {
+            const active = isCurrentPage(location.pathname, item.to)
+            return (
+              <Link key={item.to} to={item.to} aria-current={active ? 'page' : undefined} className={`nav-link${active ? ' nav-link--active' : ''}`}>
+                {item.label}
+              </Link>
+            )
+          })}
         </nav>
         <main className="app-content" id="conteudo-principal">
           {logoutError && <AlertMessage tone="error">{logoutError}</AlertMessage>}

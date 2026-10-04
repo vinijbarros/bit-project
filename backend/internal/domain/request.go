@@ -39,6 +39,29 @@ type Request struct {
 	UpdatedAt   time.Time
 }
 
+type LabeledValue struct {
+	Value string
+	Label string
+}
+
+func Categories() []LabeledValue {
+	return []LabeledValue{
+		{Value: CategoryTI, Label: categoryLabels[CategoryTI]},
+		{Value: CategoryRH, Label: categoryLabels[CategoryRH]},
+		{Value: CategoryPurchases, Label: categoryLabels[CategoryPurchases]},
+		{Value: CategoryFinance, Label: categoryLabels[CategoryFinance]},
+		{Value: CategoryInfrastructure, Label: categoryLabels[CategoryInfrastructure]},
+	}
+}
+
+func Statuses() []LabeledValue {
+	return []LabeledValue{
+		{Value: StatusOpen, Label: statusLabels[StatusOpen]},
+		{Value: StatusInProgress, Label: statusLabels[StatusInProgress]},
+		{Value: StatusCompleted, Label: statusLabels[StatusCompleted]},
+	}
+}
+
 func CategoryLabel(value string) (string, bool) {
 	label, ok := categoryLabels[value]
 	return label, ok

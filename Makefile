@@ -4,10 +4,13 @@ export
 GOCACHE ?= $(CURDIR)/.cache/go-build
 export GOCACHE
 
-.PHONY: help db-up db-down db-test-up db-test-down api migrate-up migrate-status migrate-down seed-demo seed-reset-passwords test-integration frontend-install frontend-dev fmt check build
+.PHONY: help compose-up compose-seed compose-down db-up db-down db-test-up db-test-down api migrate-up migrate-status migrate-down seed-demo seed-reset-passwords test-integration frontend-install frontend-dev frontend-e2e evidence openapi-check fmt check build
 
 help:
 	@echo "Alvos disponíveis:"
+	@echo "  compose-up        compila e inicia a aplicação completa"
+	@echo "  compose-seed      executa explicitamente o seed demo"
+	@echo "  compose-down      encerra a aplicação preservando o volume"
 	@echo "  db-up            inicia somente o PostgreSQL"
 	@echo "  db-down          encerra o PostgreSQL"
 	@echo "  db-test-up       inicia PostgreSQL descartável de integração"
@@ -21,9 +24,21 @@ help:
 	@echo "  test-integration executa testes PostgreSQL (exige TEST_DATABASE_URL e confirmação)"
 	@echo "  frontend-install instala dependências com npm ci"
 	@echo "  frontend-dev     inicia o Vite em modo desenvolvimento"
+	@echo "  frontend-e2e     executa Playwright contra E2E_BASE_URL já disponível"
+	@echo "  evidence         gera capturas reais contra E2E_BASE_URL já disponível"
+	@echo "  openapi-check    valida docs/openapi.yaml com Redocly CLI fixado"
 	@echo "  fmt              formata o código Go"
 	@echo "  check            executa testes Go, lint e tipos do frontend"
 	@echo "  build            compila API/comandos e frontend"
+
+compose-up:
+	docker compose up -d --build --wait
+
+compose-seed:
+	DEMO_SEED_ENABLED=true docker compose --profile demo run --rm seed
+
+compose-down:
+	docker compose down
 
 db-up:
 	docker compose up -d postgres
@@ -67,6 +82,15 @@ frontend-install:
 
 frontend-dev:
 	cd frontend && npm run dev
+
+frontend-e2e:
+	cd frontend && npm run test:e2e
+
+evidence:
+	cd frontend && npm run evidence
+
+openapi-check:
+	npx --yes @redocly/cli@2.57.0 lint docs/openapi.yaml
 
 fmt:
 	cd backend && gofmt -w $$(find . -name '*.go' -type f)
